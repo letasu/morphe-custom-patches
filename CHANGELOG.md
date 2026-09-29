@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/letasu/morphe-custom-patches/compare/v1.0.0...v1.0.1) (2026-09-29)
+
+### 🐛 Bug Fixes
+
+* allow overwriting branding files to prevent multi-source patch conflicts ([672f954](https://github.com/letasu/morphe-custom-patches/commit/672f954c6217d6cf0badb13f3267a04463b67907))
+
 ## 1.0.0 (2026-09-29)
 
 ### 🐛 Bug Fixes
