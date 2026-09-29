@@ -15,6 +15,7 @@ import app.morphe.extension.youtube.patches.VideoInformation;
 import app.morphe.extension.youtube.settings.Settings;
 import app.morphe.extension.youtube.shared.PlayerType;
 import app.morphe.extension.youtube.shared.VideoState;
+import kotlin.Unit;
 
 /**
  * Smart Audio Focus Manager:
@@ -51,10 +52,16 @@ public final class SmartAudioFocusManager {
         Logger.printDebug(() -> "SmartAudioFocusManager: Initializing listeners");
 
         // Listen for player type changes (navigating between watch page, miniplayer, feeds)
-        PlayerType.getOnChange().add(SmartAudioFocusManager::onPlayerTypeChanged);
+        PlayerType.getOnChange().addObserver((PlayerType type) -> {
+            onPlayerTypeChanged(type);
+            return Unit.INSTANCE;
+        });
 
         // Listen for video state changes (play, pause, ended)
-        VideoState.getOnChange().add(SmartAudioFocusManager::onVideoStateChanged);
+        VideoState.getOnChange().addObserver((VideoState state) -> {
+            onVideoStateChanged(state);
+            return Unit.INSTANCE;
+        });
     }
 
     private static void onPlayerTypeChanged(PlayerType newType) {

@@ -26,8 +26,8 @@ val hideMembersVideosPatch = bytecodePatch(
     compatibleWith(COMPATIBILITY_YOUTUBE)
 
     execute {
-        PreferenceScreen.LAYOUT.addPreferences(
-            SwitchPreference("morphe_hide_members_videos"),
+        PreferenceScreen.FEED.addPreferences(
+            SwitchPreference("morphe_hide_members_videos", summary = true),
         )
 
         addLithoFilter(EXTENSION_FILTER)
