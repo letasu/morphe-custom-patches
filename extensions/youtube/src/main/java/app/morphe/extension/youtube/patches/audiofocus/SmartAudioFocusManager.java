@@ -13,13 +13,14 @@ import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
 import app.morphe.extension.youtube.settings.Settings;
 import app.morphe.extension.youtube.shared.PlayerType;
+import app.morphe.extension.youtube.shared.ShortsPlayerState;
 import app.morphe.extension.youtube.shared.VideoState;
 import kotlin.Unit;
 
 /**
  * Smart Audio Focus Manager:
  * Manages audio focus transitions to temporarily pause external media (Apple Music, Spotify, etc.)
- * during YouTube video playback and automatically resume it when leaving the video watch session.
+ * during YouTube video & Shorts playback and automatically resume it when leaving the video session.
  */
 public final class SmartAudioFocusManager {
 
@@ -47,7 +48,7 @@ public final class SmartAudioFocusManager {
     private SmartAudioFocusManager() {}
 
     /**
-     * Initializes listeners for player type and video state.
+     * Initializes listeners for player type, video state, and shorts state.
      */
     public static synchronized void initialize() {
         if (initialized) return;
@@ -55,13 +56,21 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: Initializing listeners");
 
+        // Listen for regular player type changes (watch page, miniplayer, dismiss)
         PlayerType.getOnChange().addObserver((PlayerType type) -> {
             onPlayerTypeChanged(type);
             return Unit.INSTANCE;
         });
 
+        // Listen for regular video playback state (play, pause, ended)
         VideoState.getOnChange().addObserver((VideoState state) -> {
             onVideoStateChanged(state);
+            return Unit.INSTANCE;
+        });
+
+        // Listen for Shorts player state (open, closed)
+        ShortsPlayerState.getOnChange().addObserver((Boolean isOpen) -> {
+            onShortsStateChanged(isOpen);
             return Unit.INSTANCE;
         });
     }
@@ -82,9 +91,15 @@ public final class SmartAudioFocusManager {
         } else if (newType == PlayerType.NONE
                 || newType == PlayerType.WATCH_WHILE_SLIDING_MINIMIZED_DISMISSED
                 || newType == PlayerType.WATCH_WHILE_SLIDING_FULLSCREEN_DISMISSED) {
-            Logger.printDebug(() -> "SmartAudioFocusManager: Watch session ended (player dismissed)");
             isSessionActive = false;
-            abandonFocusIfHeld();
+
+            // Do not abandon focus if Shorts player is currently open!
+            if (!ShortsPlayerState.isOpen()) {
+                Logger.printDebug(() -> "SmartAudioFocusManager: Watch session ended (player dismissed)");
+                abandonFocusIfHeld();
+            } else {
+                Logger.printDebug(() -> "SmartAudioFocusManager: PlayerType is dismissed, but Shorts is open - keeping focus");
+            }
         }
     }
 
@@ -103,6 +118,35 @@ public final class SmartAudioFocusManager {
             Logger.printDebug(() -> "SmartAudioFocusManager: Video paused, retaining audio focus for session");
         } else if (newState == VideoState.ENDED) {
             Logger.printDebug(() -> "SmartAudioFocusManager: Video ended");
+        }
+    }
+
+    private static void onShortsStateChanged(boolean isOpen) {
+        if (!Settings.SMART_AUDIO_FOCUS.get()) {
+            return;
+        }
+
+        Logger.printDebug(() -> "SmartAudioFocusManager: Shorts open changed to: " + isOpen);
+
+        if (isOpen) {
+            userManuallyChangedMedia = false;
+            ensureAudioFocus();
+        } else {
+            // When Shorts player closes, abandon focus if regular video is not playing
+            if (!isRegularVideoActive()) {
+                Logger.printDebug(() -> "SmartAudioFocusManager: Shorts closed, releasing focus");
+                forceAbandonFocus();
+            }
+        }
+    }
+
+    private static boolean isRegularVideoActive() {
+        try {
+            PlayerType current = PlayerType.getCurrent();
+            return (current != null && (current.isMaximizedOrFullscreen() || current == PlayerType.WATCH_WHILE_MINIMIZED))
+                    && VideoState.getCurrent() == VideoState.PLAYING;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
@@ -128,7 +172,7 @@ public final class SmartAudioFocusManager {
 
     /**
      * Ensures audio focus is held with transient gain, pausing external music.
-     * Guaranteed to be called on EVERY video play, even if ExoPlayer doesn't re-request focus.
+     * Works for both regular videos and Shorts.
      */
     public static synchronized void ensureAudioFocus() {
         if (hasTransientFocus || userManuallyChangedMedia) {
@@ -183,7 +227,7 @@ public final class SmartAudioFocusManager {
         Logger.printDebug(() -> "SmartAudioFocusManager: onAudioFocusChange: " + focusChange);
         if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
             hasTransientFocus = false;
-            if (isSessionActive) {
+            if (isSessionActive || ShortsPlayerState.isOpen()) {
                 userManuallyChangedMedia = true;
             }
         } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
@@ -296,9 +340,9 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: abandonAudioFocusRequest intercepted. isSessionActive=" + isSessionActive);
 
-        // If user is still in watch session, suppress abandonment so external music doesn't resume
-        if (isSessionActive && !userManuallyChangedMedia) {
-            Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing abandonAudioFocusRequest because session is active");
+        // If user is in watch session or watching Shorts, suppress abandonment
+        if ((isSessionActive || ShortsPlayerState.isOpen()) && !userManuallyChangedMedia) {
+            Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing abandonAudioFocusRequest because media is active");
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         }
 
@@ -321,8 +365,8 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: Legacy abandonAudioFocus intercepted. isSessionActive=" + isSessionActive);
 
-        if (isSessionActive && !userManuallyChangedMedia) {
-            Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing legacy abandonAudioFocus because session is active");
+        if ((isSessionActive || ShortsPlayerState.isOpen()) && !userManuallyChangedMedia) {
+            Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing legacy abandonAudioFocus because media is active");
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         }
 
@@ -331,19 +375,32 @@ public final class SmartAudioFocusManager {
     }
 
     /**
-     * Releases audio focus when leaving the watch session.
+     * Releases audio focus if no media (regular video or Shorts) is currently active.
      */
     public static synchronized void abandonFocusIfHeld() {
         if (!hasTransientFocus) {
             return;
         }
 
+        // Do not release if Shorts or regular video is still playing
+        if (ShortsPlayerState.isOpen() || isRegularVideoActive()) {
+            Logger.printDebug(() -> "SmartAudioFocusManager: abandonFocusIfHeld suppressed because media is still active");
+            return;
+        }
+
+        forceAbandonFocus();
+    }
+
+    /**
+     * Unconditionally releases audio focus and resets session state.
+     */
+    private static synchronized void forceAbandonFocus() {
         AudioManager audioManager = getAudioManager();
         if (audioManager == null) {
             return;
         }
 
-        Logger.printDebug(() -> "SmartAudioFocusManager: Releasing audio focus now (abandoning focus)");
+        Logger.printDebug(() -> "SmartAudioFocusManager: Releasing audio focus now");
         hasTransientFocus = false;
         isSessionActive = false;
 
@@ -371,6 +428,6 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: Activity stopped, abandoning focus");
         isSessionActive = false;
-        abandonFocusIfHeld();
+        forceAbandonFocus();
     }
 }
