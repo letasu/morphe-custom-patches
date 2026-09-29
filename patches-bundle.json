@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-09-29T16:28:41",
-  "description": "## [1.0.2](https://github.com/letasu/morphe-custom-patches/compare/v1.0.1...v1.0.2) (2026-09-29)\n\n### 🐛 Bug Fixes\n\n* **audiofocus:** ensure transient focus on every playback start and robust session lifecycle ([d1589fa](https://github.com/letasu/morphe-custom-patches/commit/d1589fad91e90e5346e82440d858a9cd8e17c11f))",
-  "download_url": "https://github.com/letasu/morphe-custom-patches/releases/download/v1.0.2/patches-1.0.2.mpp",
+  "created_at": "2026-09-29T16:58:26",
+  "description": "## [1.0.3](https://github.com/letasu/morphe-custom-patches/compare/v1.0.2...v1.0.3) (2026-09-29)\n\n### 🐛 Bug Fixes\n\n* **audiofocus:** support Shorts playback lifecycle in SmartAudioFocusManager ([8e85cb1](https://github.com/letasu/morphe-custom-patches/commit/8e85cb16481761f5552b279a6fa5a4bbdbe79797))",
+  "download_url": "https://github.com/letasu/morphe-custom-patches/releases/download/v1.0.3/patches-1.0.3.mpp",
   "signature_download_url": "",
-  "version": "1.0.2"
+  "version": "1.0.3"
 }

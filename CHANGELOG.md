@@ -1,3 +1,9 @@
+## [1.0.3](https://github.com/letasu/morphe-custom-patches/compare/v1.0.2...v1.0.3) (2026-09-29)
+
+### 🐛 Bug Fixes
+
+* **audiofocus:** support Shorts playback lifecycle in SmartAudioFocusManager ([8e85cb1](https://github.com/letasu/morphe-custom-patches/commit/8e85cb16481761f5552b279a6fa5a4bbdbe79797))
+
 ## [1.0.2](https://github.com/letasu/morphe-custom-patches/compare/v1.0.1...v1.0.2) (2026-09-29)
 
 ### 🐛 Bug Fixes
