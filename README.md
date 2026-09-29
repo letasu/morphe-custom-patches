@@ -35,9 +35,9 @@ All modifications made by Morphe, along with their dates, can be found in the Gi
 ## 🩹 Patches list
 
 <!-- PATCHES_START -->
-> **[v1.44.0](https://github.com/MorpheApp/morphe-patches/releases/tag/v1.44.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;150 patches total
+> **[v1.0.0](https://github.com/letasu/morphe-custom-patches/releases/tag/v1.0.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;152 patches total
 <details>
-<summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;84 patches</summary>
+<summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;86 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -90,6 +90,7 @@ All modifications made by Morphe, along with their dates, can be found in the Gi
 | [Hide end screen suggested video](#hide-end-screen-suggested-video) | Adds an option to hide the suggested video at the end of videos. |  |
 | [Hide info cards](#hide-info-cards) | Adds an option to hide info cards that creators add in the video player. |  |
 | [Hide layout components](#hide-layout-components) | Adds options to hide general layout components. |  |
+| [Hide members videos](#hide-members-videos) | Hides members-only and members-first videos from home feed, subscriptions, search, and channel feeds. |  |
 | [Hide player flyout menu components](#hide-player-flyout-menu-components) | Adds options to hide menu components that appear when pressing the gear icon in the video player. |  |
 | [Hide player overlay buttons](#hide-player-overlay-buttons) | Adds options to hide the player Cast, Autoplay, Captions, Previous & Next buttons, and to hide or change the opacity of the player control buttons background. |  |
 | [Hide related video overlay](#hide-related-video-overlay) | Adds an option to hide the related video overlay shown when swiping up in fullscreen. |  |
@@ -122,6 +123,7 @@ All modifications made by Morphe, along with their dates, can be found in the Gi
 | [Seekbar](#seekbar) | Adds options to show old seekbar thumbnails, disable precise seeking when swiping up on the seekbar, slide to seek instead of playing at 2x speed when pressing and holding, tapping the player seekbar to seek, hiding the video player seekbar, enabling seeking in live streams, and expanding the live stream DVR duration. |  |
 | [Settings menu filter](#settings-menu-filter) | Adds an option to hide items on the standard YouTube settings screen by their visible name. |  |
 | [Shorts autoplay](#shorts-autoplay) | Adds options to automatically play the next Short. |  |
+| [Smart audio focus](#smart-audio-focus) | Pauses external music while playing YouTube videos and automatically resumes when leaving the video player. |  |
 | [SponsorBlock](#sponsorblock) | Adds options to enable and configure SponsorBlock, which can skip undesired video segments such as sponsored content. |  |
 | [Spoof app version](#spoof-app-version) | Adds an option to trick the app into thinking you are running an older version. |  |
 | [Spoof device dimensions](#spoof-device-dimensions) | Adds an option to spoof the device dimensions which can unlock higher video qualities. |  |

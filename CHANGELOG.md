@@ -1,3 +1,13 @@
+## 1.0.0 (2026-09-29)
+
+### 🐛 Bug Fixes
+
+* resolve Event listener method and PreferenceScreen reference ([04d21ef](https://github.com/letasu/morphe-custom-patches/commit/04d21ef2bc5432fca5011e05c0bee3d7fe10f5c4))
+
+### ✨ New Features
+
+* **youtube:** initial release with HideMembersVideos and SmartAudioFocus patches ([e42c067](https://github.com/letasu/morphe-custom-patches/commit/e42c067eb1cd4ec6546706a725180c114adbdca5))
+
 ## [1.44.0](https://github.com/MorpheApp/morphe-patches/compare/v1.43.0...v1.44.0) (2026-09-21)
 
 ### 🐛 Bug Fixes
