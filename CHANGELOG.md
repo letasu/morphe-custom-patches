@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/letasu/morphe-custom-patches/compare/v1.0.1...v1.0.2) (2026-09-29)
+
+### 🐛 Bug Fixes
+
+* **audiofocus:** ensure transient focus on every playback start and robust session lifecycle ([d1589fa](https://github.com/letasu/morphe-custom-patches/commit/d1589fad91e90e5346e82440d858a9cd8e17c11f))
+
 ## [1.0.1](https://github.com/letasu/morphe-custom-patches/compare/v1.0.0...v1.0.1) (2026-09-29)
 
 ### 🐛 Bug Fixes
