@@ -6,12 +6,11 @@ import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
 
-import androidx.annotation.Nullable;
-
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 
 import app.morphe.extension.shared.Logger;
-import app.morphe.extension.youtube.patches.VideoInformation;
+import app.morphe.extension.shared.Utils;
 import app.morphe.extension.youtube.settings.Settings;
 import app.morphe.extension.youtube.shared.PlayerType;
 import app.morphe.extension.youtube.shared.VideoState;
@@ -31,19 +30,24 @@ public final class SmartAudioFocusManager {
     private static volatile boolean hasTransientFocus = false;
     private static volatile boolean userManuallyChangedMedia = false;
 
-    // Cached references for focus abandonment
+    // Cached references
     private static WeakReference<AudioManager> activeAudioManagerRef = new WeakReference<>(null);
     private static Object activeFocusRequest = null; // AudioFocusRequest on API 26+
     private static AudioManager.OnAudioFocusChangeListener activeLegacyListener = null; // on API < 26
 
-    // Wrapped listener for API 26+
+    // Wrapped request for API 26+
     private static AudioFocusRequest wrappedFocusRequest = null;
+
+    static {
+        try {
+            initialize();
+        } catch (Throwable ignored) {}
+    }
 
     private SmartAudioFocusManager() {}
 
     /**
      * Initializes listeners for player type and video state.
-     * Called once during extension startup.
      */
     public static synchronized void initialize() {
         if (initialized) return;
@@ -51,13 +55,11 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: Initializing listeners");
 
-        // Listen for player type changes (navigating between watch page, miniplayer, feeds)
         PlayerType.getOnChange().addObserver((PlayerType type) -> {
             onPlayerTypeChanged(type);
             return Unit.INSTANCE;
         });
 
-        // Listen for video state changes (play, pause, ended)
         VideoState.getOnChange().addObserver((VideoState state) -> {
             onVideoStateChanged(state);
             return Unit.INSTANCE;
@@ -71,12 +73,16 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: PlayerType changed to: " + newType);
 
-        if (newType.isMaximizedOrFullscreen()) {
-            // User is actively in the watch page / video session
+        if (newType.isMaximizedOrFullscreen() || newType == PlayerType.WATCH_WHILE_MINIMIZED) {
             isSessionActive = true;
-        } else if (newType.isNoneHiddenOrMinimized() || newType == PlayerType.WATCH_WHILE_SLIDING_MINIMIZED_DISMISSED) {
-            // User left the watch page (minimized to feed, closed, or navigated away)
-            Logger.printDebug(() -> "SmartAudioFocusManager: Watch session ended (left watch page)");
+            userManuallyChangedMedia = false;
+            if (VideoState.getCurrent() == VideoState.PLAYING) {
+                ensureAudioFocus();
+            }
+        } else if (newType == PlayerType.NONE
+                || newType == PlayerType.WATCH_WHILE_SLIDING_MINIMIZED_DISMISSED
+                || newType == PlayerType.WATCH_WHILE_SLIDING_FULLSCREEN_DISMISSED) {
+            Logger.printDebug(() -> "SmartAudioFocusManager: Watch session ended (player dismissed)");
             isSessionActive = false;
             abandonFocusIfHeld();
         }
@@ -92,19 +98,133 @@ public final class SmartAudioFocusManager {
         if (newState == VideoState.PLAYING) {
             isSessionActive = true;
             userManuallyChangedMedia = false;
+            ensureAudioFocus();
         } else if (newState == VideoState.PAUSED) {
-            // When paused, we keep the session active and DO NOT abandon focus,
-            // so external music remains paused as long as user stays on the video page.
             Logger.printDebug(() -> "SmartAudioFocusManager: Video paused, retaining audio focus for session");
         } else if (newState == VideoState.ENDED) {
-            // Video ended. Do not immediately abandon if autoplay may load next video,
-            // session will be abandoned if user leaves watch page.
             Logger.printDebug(() -> "SmartAudioFocusManager: Video ended");
         }
     }
 
+    private static AudioManager getAudioManager() {
+        AudioManager am = activeAudioManagerRef.get();
+        if (am != null) {
+            return am;
+        }
+        try {
+            Context ctx = Utils.getContext();
+            if (ctx != null) {
+                am = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+                if (am != null) {
+                    activeAudioManagerRef = new WeakReference<>(am);
+                    return am;
+                }
+            }
+        } catch (Throwable t) {
+            Logger.printException(() -> "SmartAudioFocusManager: getAudioManager failed", t);
+        }
+        return null;
+    }
+
     /**
-     * Called when YouTube or its player calls AudioManager.requestAudioFocus(...) on API 26+.
+     * Ensures audio focus is held with transient gain, pausing external music.
+     * Guaranteed to be called on EVERY video play, even if ExoPlayer doesn't re-request focus.
+     */
+    public static synchronized void ensureAudioFocus() {
+        if (hasTransientFocus || userManuallyChangedMedia) {
+            return;
+        }
+
+        AudioManager audioManager = getAudioManager();
+        if (audioManager == null) {
+            Logger.printDebug(() -> "SmartAudioFocusManager: ensureAudioFocus() - AudioManager not available");
+            return;
+        }
+
+        Logger.printDebug(() -> "SmartAudioFocusManager: ensureAudioFocus() - Requesting transient focus");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AudioAttributes attributes = null;
+            if (activeFocusRequest instanceof AudioFocusRequest) {
+                attributes = ((AudioFocusRequest) activeFocusRequest).getAudioAttributes();
+            }
+            if (attributes == null) {
+                attributes = new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build();
+            }
+
+            AudioFocusRequest.Builder builder = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    .setAudioAttributes(attributes)
+                    .setAcceptsDelayedFocusGain(false)
+                    .setWillPauseWhenDucked(true)
+                    .setOnAudioFocusChangeListener(focusListener);
+
+            wrappedFocusRequest = builder.build();
+            int result = audioManager.requestAudioFocus(wrappedFocusRequest);
+            Logger.printDebug(() -> "SmartAudioFocusManager: ensureAudioFocus request result: " + result);
+            if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                hasTransientFocus = true;
+                isSessionActive = true;
+                userManuallyChangedMedia = false;
+            }
+        } else {
+            int result = audioManager.requestAudioFocus(legacyFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+            if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                hasTransientFocus = true;
+                isSessionActive = true;
+                userManuallyChangedMedia = false;
+            }
+        }
+    }
+
+    private static final AudioManager.OnAudioFocusChangeListener focusListener = focusChange -> {
+        Logger.printDebug(() -> "SmartAudioFocusManager: onAudioFocusChange: " + focusChange);
+        if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
+            hasTransientFocus = false;
+            if (isSessionActive) {
+                userManuallyChangedMedia = true;
+            }
+        } else if (focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+            hasTransientFocus = false;
+        } else if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
+            hasTransientFocus = true;
+            userManuallyChangedMedia = false;
+        }
+        forwardFocusChange(focusChange);
+    };
+
+    private static final AudioManager.OnAudioFocusChangeListener legacyFocusListener = focusListener;
+
+    private static void forwardFocusChange(int focusChange) {
+        try {
+            if (activeLegacyListener != null) {
+                activeLegacyListener.onAudioFocusChange(focusChange);
+            } else if (activeFocusRequest instanceof AudioFocusRequest) {
+                AudioManager.OnAudioFocusChangeListener original = extractListener((AudioFocusRequest) activeFocusRequest);
+                if (original != null) {
+                    original.onAudioFocusChange(focusChange);
+                }
+            }
+        } catch (Throwable t) {
+            Logger.printException(() -> "SmartAudioFocusManager: forwardFocusChange failed", t);
+        }
+    }
+
+    private static AudioManager.OnAudioFocusChangeListener extractListener(AudioFocusRequest request) {
+        if (request == null) return null;
+        try {
+            Field field = AudioFocusRequest.class.getDeclaredField("mFocusListener");
+            field.setAccessible(true);
+            return (AudioManager.OnAudioFocusChangeListener) field.get(request);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * Intercepts AudioManager.requestAudioFocus(...) on API 26+.
      */
     public static int requestAudioFocus(AudioManager audioManager, AudioFocusRequest request) {
         initialize();
@@ -115,37 +235,23 @@ public final class SmartAudioFocusManager {
 
         activeAudioManagerRef = new WeakReference<>(audioManager);
         activeFocusRequest = request;
+        userManuallyChangedMedia = false;
 
         int originalGain = request.getFocusGain();
         Logger.printDebug(() -> "SmartAudioFocusManager: requestAudioFocus intercepted. Original gain: " + originalGain);
 
-        // If request is permanent GAIN, rewrite to GAIN_TRANSIENT so external music app gets LOSS_TRANSIENT
         if (originalGain == AudioManager.AUDIOFOCUS_GAIN) {
-            Logger.printDebug(() -> "SmartAudioFocusManager: Rewriting AUDIOFOCUS_GAIN to AUDIOFOCUS_GAIN_TRANSIENT");
-
             AudioFocusRequest.Builder builder = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                     .setAudioAttributes(request.getAudioAttributes())
                     .setAcceptsDelayedFocusGain(request.acceptsDelayedFocusGain())
-                    .setWillPauseWhenDucked(request.willPauseWhenDucked());
-
-            // Wrap the listener to observe when another app claims focus permanently
-            builder.setOnAudioFocusChangeListener(focusChange -> {
-                Logger.printDebug(() -> "SmartAudioFocusManager: onAudioFocusChange: " + focusChange);
-                if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
-                    // Another app (e.g. Spotify, Apple Music) was manually played by user
-                    Logger.printDebug(() -> "SmartAudioFocusManager: AUDIOFOCUS_LOSS received - user manually played external media");
-                    userManuallyChangedMedia = true;
-                    hasTransientFocus = false;
-                    isSessionActive = false;
-                }
-            });
+                    .setWillPauseWhenDucked(request.willPauseWhenDucked())
+                    .setOnAudioFocusChangeListener(focusListener);
 
             wrappedFocusRequest = builder.build();
             int result = audioManager.requestAudioFocus(wrappedFocusRequest);
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 hasTransientFocus = true;
                 isSessionActive = true;
-                userManuallyChangedMedia = false;
             }
             return result;
         }
@@ -154,7 +260,7 @@ public final class SmartAudioFocusManager {
     }
 
     /**
-     * Called when YouTube or its player calls AudioManager.requestAudioFocus(...) on API < 26.
+     * Intercepts AudioManager.requestAudioFocus(...) on API < 26.
      */
     public static int requestAudioFocus(AudioManager audioManager, AudioManager.OnAudioFocusChangeListener listener,
                                         int streamType, int durationHint) {
@@ -166,36 +272,22 @@ public final class SmartAudioFocusManager {
 
         activeAudioManagerRef = new WeakReference<>(audioManager);
         activeLegacyListener = listener;
+        userManuallyChangedMedia = false;
 
-        Logger.printDebug(() -> "SmartAudioFocusManager: Legacy requestAudioFocus intercepted. Hint: " + durationHint);
+        int hintToUse = (durationHint == AudioManager.AUDIOFOCUS_GAIN)
+                ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                : durationHint;
 
-        int hintToUse = durationHint;
-        if (durationHint == AudioManager.AUDIOFOCUS_GAIN) {
-            hintToUse = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT;
-        }
-
-        AudioManager.OnAudioFocusChangeListener wrappedListener = focusChange -> {
-            if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
-                userManuallyChangedMedia = true;
-                hasTransientFocus = false;
-                isSessionActive = false;
-            }
-            if (listener != null) {
-                listener.onAudioFocusChange(focusChange);
-            }
-        };
-
-        int result = audioManager.requestAudioFocus(wrappedListener, streamType, hintToUse);
+        int result = audioManager.requestAudioFocus(focusListener, streamType, hintToUse);
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             hasTransientFocus = true;
             isSessionActive = true;
-            userManuallyChangedMedia = false;
         }
         return result;
     }
 
     /**
-     * Called when YouTube or its player calls AudioManager.abandonAudioFocusRequest(...) on API 26+.
+     * Intercepts AudioManager.abandonAudioFocusRequest(...) on API 26+.
      */
     public static int abandonAudioFocusRequest(AudioManager audioManager, AudioFocusRequest request) {
         if (!Settings.SMART_AUDIO_FOCUS.get() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
@@ -204,7 +296,7 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: abandonAudioFocusRequest intercepted. isSessionActive=" + isSessionActive);
 
-        // If user is still in watch session (e.g., video was paused or seeking), suppress abandonment
+        // If user is still in watch session, suppress abandonment so external music doesn't resume
         if (isSessionActive && !userManuallyChangedMedia) {
             Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing abandonAudioFocusRequest because session is active");
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
@@ -220,7 +312,7 @@ public final class SmartAudioFocusManager {
     }
 
     /**
-     * Called when YouTube or its player calls AudioManager.abandonAudioFocus(...) on API < 26.
+     * Intercepts AudioManager.abandonAudioFocus(...) on API < 26.
      */
     public static int abandonAudioFocus(AudioManager audioManager, AudioManager.OnAudioFocusChangeListener listener) {
         if (!Settings.SMART_AUDIO_FOCUS.get()) {
@@ -240,21 +332,20 @@ public final class SmartAudioFocusManager {
 
     /**
      * Releases audio focus when leaving the watch session.
-     * This signals the Android system to notify the previous audio focus owner (Apple Music, Spotify, etc.)
-     * with AUDIOFOCUS_GAIN, automatically resuming their playback.
      */
-    public static void abandonFocusIfHeld() {
-        if (!hasTransientFocus || userManuallyChangedMedia) {
+    public static synchronized void abandonFocusIfHeld() {
+        if (!hasTransientFocus) {
             return;
         }
 
-        AudioManager audioManager = activeAudioManagerRef.get();
+        AudioManager audioManager = getAudioManager();
         if (audioManager == null) {
             return;
         }
 
         Logger.printDebug(() -> "SmartAudioFocusManager: Releasing audio focus now (abandoning focus)");
         hasTransientFocus = false;
+        isSessionActive = false;
 
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -273,12 +364,11 @@ public final class SmartAudioFocusManager {
     }
 
     /**
-     * Called on MainActivity lifecycle events (e.g., onDestroy or onStop when background play is disabled).
+     * Called on MainActivity lifecycle events.
      */
     public static void onActivityStopped() {
         if (!Settings.SMART_AUDIO_FOCUS.get()) return;
 
-        // If app is closed or stopped, abandon focus
         Logger.printDebug(() -> "SmartAudioFocusManager: Activity stopped, abandoning focus");
         isSessionActive = false;
         abandonFocusIfHeld();

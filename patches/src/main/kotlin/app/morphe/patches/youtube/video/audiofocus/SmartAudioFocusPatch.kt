@@ -120,16 +120,22 @@ val smartAudioFocusPatch = bytecodePatch(
             }
         }
 
-        // Hook MainActivity onStop to release audio focus if the user leaves the app completely
+        // Hook MainActivity onCreate to initialize listeners early, and onStop to release audio focus
         try {
             val mainActivity = mutableClassDefBy(YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE)
+            val onCreateMethod = mainActivity.methods.firstOrNull { it.name == "onCreate" }
+            onCreateMethod?.addInstruction(
+                0,
+                "invoke-static {}, $EXTENSION_CLASS->initialize()V"
+            )
+
             val onStopMethod = mainActivity.methods.firstOrNull { it.name == "onStop" && it.parameterTypes.isEmpty() }
             onStopMethod?.addInstruction(
                 0,
                 "invoke-static {}, $EXTENSION_CLASS->onActivityStopped()V"
             )
         } catch (_: Exception) {
-            // MainActivity onStop hook optional
+            // MainActivity hooks optional
         }
     }
 }
