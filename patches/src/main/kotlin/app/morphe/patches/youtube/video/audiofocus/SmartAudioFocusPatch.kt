@@ -5,13 +5,11 @@ import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
 import app.morphe.patches.youtube.misc.extension.sharedExtensionPatch
-import app.morphe.patches.youtube.misc.navigation.navigationBarHookPatch
 import app.morphe.patches.youtube.misc.playertype.playerTypeHookPatch
 import app.morphe.patches.youtube.misc.settings.PreferenceScreen
 import app.morphe.patches.youtube.misc.settings.settingsPatch
 import app.morphe.patches.youtube.shared.Constants.COMPATIBILITY_YOUTUBE
 import app.morphe.patches.youtube.shared.YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE
-import app.morphe.patches.youtube.video.information.videoInformationPatch
 import app.morphe.util.findMutableMethodOf
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
@@ -30,8 +28,6 @@ val smartAudioFocusPatch = bytecodePatch(
     dependsOn(
         sharedExtensionPatch,
         playerTypeHookPatch,
-        navigationBarHookPatch,
-        videoInformationPatch,
         settingsPatch,
     )
 
@@ -124,16 +120,34 @@ val smartAudioFocusPatch = bytecodePatch(
         try {
             val mainActivity = mutableClassDefBy(YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE)
             val onCreateMethod = mainActivity.methods.firstOrNull { it.name == "onCreate" }
-            onCreateMethod?.addInstruction(
-                0,
-                "invoke-static {}, $EXTENSION_CLASS->initialize()V"
-            )
+            onCreateMethod?.let { method ->
+                val alreadyHooked = method.implementation?.instructions?.any {
+                    (it as? ReferenceInstruction)?.reference?.let { ref ->
+                        (ref as? MethodReference)?.definingClass == EXTENSION_CLASS && (ref as? MethodReference)?.name == "initialize"
+                    } == true
+                } ?: false
+                if (!alreadyHooked) {
+                    method.addInstruction(
+                        0,
+                        "invoke-static {}, $EXTENSION_CLASS->initialize()V"
+                    )
+                }
+            }
 
             val onStopMethod = mainActivity.methods.firstOrNull { it.name == "onStop" && it.parameterTypes.isEmpty() }
-            onStopMethod?.addInstruction(
-                0,
-                "invoke-static {}, $EXTENSION_CLASS->onActivityStopped()V"
-            )
+            onStopMethod?.let { method ->
+                val alreadyHooked = method.implementation?.instructions?.any {
+                    (it as? ReferenceInstruction)?.reference?.let { ref ->
+                        (ref as? MethodReference)?.definingClass == EXTENSION_CLASS && (ref as? MethodReference)?.name == "onActivityStopped"
+                    } == true
+                } ?: false
+                if (!alreadyHooked) {
+                    method.addInstruction(
+                        0,
+                        "invoke-static {}, $EXTENSION_CLASS->onActivityStopped()V"
+                    )
+                }
+            }
         } catch (_: Exception) {
             // MainActivity hooks optional
         }

@@ -11,8 +11,10 @@ import app.morphe.patcher.resourceLiteral
 import app.morphe.patches.youtube.misc.extension.sharedExtensionPatch
 import app.morphe.patches.youtube.shared.getPlayerTypeFingerprint
 import com.android.tools.smali.dexlib2.AccessFlags
+import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
 private const val EXTENSION_CLASS = "Lapp/morphe/extension/youtube/patches/PlayerTypeHookPatch;"
 
@@ -22,20 +24,43 @@ val playerTypeHookPatch = bytecodePatch(
     dependsOn(sharedExtensionPatch)
 
     execute {
-        getPlayerTypeFingerprint().method.addInstruction(
-            0,
-            "invoke-static { p1 }, $EXTENSION_CLASS->setPlayerType(Ljava/lang/Enum;)V",
-        )
+        val playerTypeMethod = getPlayerTypeFingerprint().method
+        val playerTypeAlreadyHooked = playerTypeMethod.implementation?.instructions?.any { inst ->
+            inst.opcode == Opcode.INVOKE_STATIC &&
+                (inst as? ReferenceInstruction)?.reference?.let { ref ->
+                    (ref as? MethodReference)?.let { mRef ->
+                        mRef.definingClass == EXTENSION_CLASS && mRef.name == "setPlayerType"
+                    }
+                } == true
+        } == true
+
+        if (!playerTypeAlreadyHooked) {
+            playerTypeMethod.addInstruction(
+                0,
+                "invoke-static { p1 }, $EXTENSION_CLASS->setPlayerType(Ljava/lang/Enum;)V",
+            )
+        }
 
         ReelWatchPagerFingerprint.let {
             it.method.apply {
-                val index = it.instructionMatches.last().index
-                val register = getInstruction<OneRegisterInstruction>(index).registerA
+                val alreadyHooked = implementation?.instructions?.any { inst ->
+                    inst.opcode == Opcode.INVOKE_STATIC &&
+                        (inst as? ReferenceInstruction)?.reference?.let { ref ->
+                            (ref as? MethodReference)?.let { mRef ->
+                                mRef.definingClass == EXTENSION_CLASS && mRef.name == "onShortsCreate"
+                            }
+                        } == true
+                } == true
 
-                addInstruction(
-                    index + 1,
-                    "invoke-static { v$register }, $EXTENSION_CLASS->onShortsCreate(Landroid/view/View;)V"
-                )
+                if (!alreadyHooked) {
+                    val index = it.instructionMatches.last().index
+                    val register = getInstruction<OneRegisterInstruction>(index).registerA
+
+                    addInstruction(
+                        index + 1,
+                        "invoke-static { v$register }, $EXTENSION_CLASS->onShortsCreate(Landroid/view/View;)V"
+                    )
+                }
             }
         }
 
@@ -57,17 +82,28 @@ val playerTypeHookPatch = bytecodePatch(
             )
         ).let {
             it.method.apply {
-                val videoStateFieldName = getInstruction<ReferenceInstruction>(
-                    it.instructionMatches.first().index
-                ).reference
+                val alreadyHooked = implementation?.instructions?.any { inst ->
+                    inst.opcode == Opcode.INVOKE_STATIC &&
+                        (inst as? ReferenceInstruction)?.reference?.let { ref ->
+                            (ref as? MethodReference)?.let { mRef ->
+                                mRef.definingClass == EXTENSION_CLASS && mRef.name == "setVideoState"
+                            }
+                        } == true
+                } == true
 
-                addInstructions(
-                    0,
-                    """
-                        iget-object v0, p1, $videoStateFieldName  # copy VideoState parameter field
-                        invoke-static {v0}, $EXTENSION_CLASS->setVideoState(Ljava/lang/Enum;)V
-                    """
-                )
+                if (!alreadyHooked) {
+                    val videoStateFieldName = getInstruction<ReferenceInstruction>(
+                        it.instructionMatches.first().index
+                    ).reference
+
+                    addInstructions(
+                        0,
+                        """
+                            iget-object v0, p1, $videoStateFieldName  # copy VideoState parameter field
+                            invoke-static {v0}, $EXTENSION_CLASS->setVideoState(Ljava/lang/Enum;)V
+                        """
+                    )
+                }
             }
         }
     }
