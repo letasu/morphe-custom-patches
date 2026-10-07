@@ -2,6 +2,8 @@ package app.morphe.extension.youtube.patches.components;
 
 import androidx.annotation.Nullable;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Locale;
 
 import app.morphe.extension.shared.ByteTrieSearch;
@@ -9,6 +11,7 @@ import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.patches.components.BufferAsciiStrings;
 import app.morphe.extension.shared.patches.components.ContextInterface;
 import app.morphe.extension.shared.patches.components.Filter;
+import app.morphe.extension.shared.patches.components.LithoFilterPatch;
 import app.morphe.extension.shared.patches.components.StringFilterGroup;
 import app.morphe.extension.youtube.settings.Settings;
 
@@ -17,6 +20,51 @@ import app.morphe.extension.youtube.settings.Settings;
  */
 @SuppressWarnings("unused")
 public final class MembersVideoFilter extends Filter {
+
+    private static volatile boolean isRegistered = false;
+
+    static {
+        initialize();
+    }
+
+    public static synchronized void initialize() {
+        if (isRegistered) return;
+        isRegistered = true;
+        try {
+            MembersVideoFilter filter = new MembersVideoFilter();
+            try {
+                LithoFilterPatch.registerFilter(filter);
+                Logger.printDebug(() -> "MembersVideoFilter: registered directly with LithoFilterPatch");
+                return;
+            } catch (Throwable ignored) {}
+
+            // Fallback: register via reflection in case LithoFilterPatch was provided by stock Morphe
+            Class<?> lithoPatchClass = Class.forName("app.morphe.extension.shared.patches.components.LithoFilterPatch");
+            Method filterUsingCallbacksMethod = null;
+            for (Method m : lithoPatchClass.getDeclaredMethods()) {
+                if (m.getName().equals("filterUsingCallbacks")) {
+                    filterUsingCallbacksMethod = m;
+                    m.setAccessible(true);
+                    break;
+                }
+            }
+            Field idTreeField = lithoPatchClass.getDeclaredField("identifierSearchTree");
+            idTreeField.setAccessible(true);
+            Object idTree = idTreeField.get(null);
+
+            Field pathTreeField = lithoPatchClass.getDeclaredField("pathSearchTree");
+            pathTreeField.setAccessible(true);
+            Object pathTree = pathTreeField.get(null);
+
+            if (filterUsingCallbacksMethod != null && pathTree != null && idTree != null) {
+                filterUsingCallbacksMethod.invoke(null, idTree, filter, filter.identifierCallbacks, Filter.FilterContentType.IDENTIFIER);
+                filterUsingCallbacksMethod.invoke(null, pathTree, filter, filter.pathCallbacks, Filter.FilterContentType.PATH);
+                Logger.printDebug(() -> "MembersVideoFilter: registered via reflection into LithoFilterPatch");
+            }
+        } catch (Throwable t) {
+            Logger.printException(() -> "MembersVideoFilter: Failed to register filter", t);
+        }
+    }
 
     private static final ByteTrieSearch membersBufferSearch = new ByteTrieSearch(
             ByteTrieSearch.convertStringsToBytes(
