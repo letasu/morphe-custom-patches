@@ -1,5 +1,6 @@
 package app.morphe.extension.youtube.patches.components;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.lang.reflect.Field;
@@ -11,9 +12,9 @@ import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.patches.components.BufferAsciiStrings;
 import app.morphe.extension.shared.patches.components.ContextInterface;
 import app.morphe.extension.shared.patches.components.Filter;
-import app.morphe.extension.shared.patches.components.LithoFilterPatch;
 import app.morphe.extension.shared.patches.components.StringFilterGroup;
-import app.morphe.extension.youtube.settings.Settings;
+import app.morphe.extension.shared.settings.BaseSettings;
+import app.morphe.extension.shared.settings.BooleanSetting;
 
 /**
  * Filters out members-only and members-first video cards from feeds (Home, Subscriptions, Search, Channel).
@@ -21,24 +22,41 @@ import app.morphe.extension.youtube.settings.Settings;
 @SuppressWarnings("unused")
 public final class MembersVideoFilter extends Filter {
 
+    public static final BooleanSetting HIDE_MEMBERS_VIDEOS =
+            new BooleanSetting("morphe_hide_members_videos", BaseSettings.FALSE, true);
+
     private static volatile boolean isRegistered = false;
 
+    /**
+     * Appends MembersVideoFilter to an existing Filter array.
+     * Injected by bytecode patch into LithoFilterPatch's filter array provider.
+     */
+    @NonNull
+    public static Filter[] appendToFilters(@Nullable Filter[] original) {
+        if (original == null || original.length == 0) {
+            return new Filter[] { new MembersVideoFilter() };
+        }
+        for (Filter f : original) {
+            if (f instanceof MembersVideoFilter) {
+                return original;
+            }
+        }
+        Filter[] newFilters = new Filter[original.length + 1];
+        System.arraycopy(original, 0, newFilters, 0, original.length);
+        newFilters[original.length] = new MembersVideoFilter();
+        return newFilters;
+    }
+
     static {
-        initialize();
+        try {
+            initialize();
+        } catch (Throwable ignored) {}
     }
 
     public static synchronized void initialize() {
         if (isRegistered) return;
         isRegistered = true;
         try {
-            MembersVideoFilter filter = new MembersVideoFilter();
-            try {
-                LithoFilterPatch.registerFilter(filter);
-                Logger.printDebug(() -> "MembersVideoFilter: registered directly with LithoFilterPatch");
-                return;
-            } catch (Throwable ignored) {}
-
-            // Fallback: register via reflection in case LithoFilterPatch was provided by stock Morphe
             Class<?> lithoPatchClass = Class.forName("app.morphe.extension.shared.patches.components.LithoFilterPatch");
             Method filterUsingCallbacksMethod = null;
             for (Method m : lithoPatchClass.getDeclaredMethods()) {
@@ -57,12 +75,13 @@ public final class MembersVideoFilter extends Filter {
             Object pathTree = pathTreeField.get(null);
 
             if (filterUsingCallbacksMethod != null && pathTree != null && idTree != null) {
+                MembersVideoFilter filter = new MembersVideoFilter();
                 filterUsingCallbacksMethod.invoke(null, idTree, filter, filter.identifierCallbacks, Filter.FilterContentType.IDENTIFIER);
                 filterUsingCallbacksMethod.invoke(null, pathTree, filter, filter.pathCallbacks, Filter.FilterContentType.PATH);
                 Logger.printDebug(() -> "MembersVideoFilter: registered via reflection into LithoFilterPatch");
             }
         } catch (Throwable t) {
-            Logger.printException(() -> "MembersVideoFilter: Failed to register filter", t);
+            Logger.printDebug(() -> "MembersVideoFilter: Reflection registration skipped: " + t.getMessage());
         }
     }
 
@@ -114,7 +133,7 @@ public final class MembersVideoFilter extends Filter {
 
     public MembersVideoFilter() {
         videoCards = new StringFilterGroup(
-                Settings.HIDE_MEMBERS_VIDEOS,
+                HIDE_MEMBERS_VIDEOS,
                 // Feed and search video cards
                 "home_video_with_context.e",
                 "video_with_context.e",
@@ -139,7 +158,7 @@ public final class MembersVideoFilter extends Filter {
     public boolean isFiltered(ContextInterface contextInterface, String identifier, String accessibility,
                               String path, byte[] buffer, BufferAsciiStrings asciiStrings,
                               StringFilterGroup matchedGroup, FilterContentType contentType, int contentIndex) {
-        if (!Settings.HIDE_MEMBERS_VIDEOS.get()) {
+        if (!HIDE_MEMBERS_VIDEOS.get()) {
             return false;
         }
 

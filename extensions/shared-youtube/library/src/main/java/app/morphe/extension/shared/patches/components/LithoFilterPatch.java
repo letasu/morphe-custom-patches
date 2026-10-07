@@ -110,12 +110,6 @@ public final class LithoFilterPatch {
                 + " (" + pathSearchTree.getEstimatedMemorySize() + " KB)");
     }
 
-    public static void registerFilter(Filter filter) {
-        filterUsingCallbacks(identifierSearchTree, filter,
-                filter.identifierCallbacks, Filter.FilterContentType.IDENTIFIER);
-        filterUsingCallbacks(pathSearchTree, filter,
-                filter.pathCallbacks, Filter.FilterContentType.PATH);
-    }
 
     private static void filterUsingCallbacks(StringTrieSearch pathSearchTree,
                                              Filter filter, List<StringFilterGroup> groups,

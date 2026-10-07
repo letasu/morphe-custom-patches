@@ -1,18 +1,20 @@
 package app.morphe.patches.youtube.video.audiofocus
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
 import app.morphe.patches.youtube.misc.extension.sharedExtensionPatch
+import app.morphe.patches.youtube.misc.playertype.ReelWatchPagerFingerprint
 import app.morphe.patches.youtube.misc.playertype.playerTypeHookPatch
 import app.morphe.patches.youtube.misc.settings.PreferenceScreen
 import app.morphe.patches.youtube.misc.settings.settingsPatch
 import app.morphe.patches.youtube.shared.Constants.COMPATIBILITY_YOUTUBE
-import app.morphe.patches.youtube.shared.YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE
 import app.morphe.util.findMutableMethodOf
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -116,40 +118,28 @@ val smartAudioFocusPatch = bytecodePatch(
             }
         }
 
-        // Hook MainActivity onCreate to initialize listeners early, and onStop to release audio focus
-        try {
-            val mainActivity = mutableClassDefBy(YOUTUBE_MAIN_ACTIVITY_CLASS_TYPE)
-            val onCreateMethod = mainActivity.methods.firstOrNull { it.name == "onCreate" }
-            onCreateMethod?.let { method ->
-                val alreadyHooked = method.implementation?.instructions?.any {
-                    (it as? ReferenceInstruction)?.reference?.let { ref ->
-                        (ref as? MethodReference)?.definingClass == EXTENSION_CLASS && (ref as? MethodReference)?.name == "initialize"
-                    } == true
-                } ?: false
-                if (!alreadyHooked) {
-                    method.addInstruction(
-                        0,
-                        "invoke-static {}, $EXTENSION_CLASS->initialize()V"
-                    )
-                }
-            }
+        // Shorts tracking hook for SmartAudioFocusManager
+        ReelWatchPagerFingerprint.let {
+            it.method.apply {
+                val alreadyHooked = implementation?.instructions?.any { inst ->
+                    inst.opcode == Opcode.INVOKE_STATIC &&
+                        (inst as? ReferenceInstruction)?.reference?.let { ref ->
+                            (ref as? MethodReference)?.let { mRef ->
+                                mRef.definingClass == EXTENSION_CLASS && mRef.name == "onShortsCreate"
+                            }
+                        } == true
+                } == true
 
-            val onStopMethod = mainActivity.methods.firstOrNull { it.name == "onStop" && it.parameterTypes.isEmpty() }
-            onStopMethod?.let { method ->
-                val alreadyHooked = method.implementation?.instructions?.any {
-                    (it as? ReferenceInstruction)?.reference?.let { ref ->
-                        (ref as? MethodReference)?.definingClass == EXTENSION_CLASS && (ref as? MethodReference)?.name == "onActivityStopped"
-                    } == true
-                } ?: false
                 if (!alreadyHooked) {
-                    method.addInstruction(
-                        0,
-                        "invoke-static {}, $EXTENSION_CLASS->onActivityStopped()V"
+                    val index = it.instructionMatches.last().index
+                    val register = getInstruction<OneRegisterInstruction>(index).registerA
+
+                    addInstruction(
+                        index + 1,
+                        "invoke-static { v$register }, $EXTENSION_CLASS->onShortsCreate(Landroid/view/View;)V"
                     )
                 }
             }
-        } catch (_: Exception) {
-            // MainActivity hooks optional
         }
     }
 }

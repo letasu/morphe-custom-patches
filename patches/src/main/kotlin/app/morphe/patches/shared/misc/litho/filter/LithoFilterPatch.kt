@@ -56,8 +56,9 @@ private var addLithoFilterCount = 0
 fun addLithoFilter(classDescriptor: String) {
     if (::helperMethodRef.isInitialized) {
         helperMethodRef.get()?.let { helper ->
-            val hasReturn = helper.implementation?.instructions?.any { it.opcode == Opcode.RETURN_OBJECT } == true
-            if (!hasReturn) {
+            val instructions = helper.implementation?.instructions ?: return@let
+            val returnInstructionIndex = instructions.indexOfLast { it.opcode == Opcode.RETURN_OBJECT }
+            if (returnInstructionIndex == -1) {
                 helper.addInstructions(
                     0,
                     """
@@ -67,6 +68,27 @@ fun addLithoFilter(classDescriptor: String) {
                         aput-object v$REGISTER_FILTER_CLASS, v$REGISTER_FILTER_ARRAY, v$REGISTER_FILTER_COUNT
                     """
                 )
+            } else {
+                // If the helper method was already finalized (e.g. by another patch source),
+                // append the filter to the existing array before return-object.
+                val returnInstruction = instructions.elementAt(returnInstructionIndex) as OneRegisterInstruction
+                val returnRegister = returnInstruction.registerA
+                val alreadyAppended = instructions.any { inst ->
+                    (inst as? ReferenceInstruction)?.reference?.let { ref ->
+                        (ref as? MethodReference)?.let { mRef ->
+                            mRef.definingClass == classDescriptor && mRef.name == "appendToFilters"
+                        }
+                    } == true
+                }
+                if (!alreadyAppended) {
+                    helper.addInstructions(
+                        returnInstructionIndex,
+                        """
+                            invoke-static { v$returnRegister }, $classDescriptor->appendToFilters($EXTENSION_FILTER)$EXTENSION_FILTER
+                            move-result-object v$returnRegister
+                        """
+                    )
+                }
             }
         }
     }

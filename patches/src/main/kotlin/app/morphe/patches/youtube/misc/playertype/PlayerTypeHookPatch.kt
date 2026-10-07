@@ -12,7 +12,6 @@ import app.morphe.patches.youtube.misc.extension.sharedExtensionPatch
 import app.morphe.patches.youtube.shared.getPlayerTypeFingerprint
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 
@@ -41,28 +40,6 @@ val playerTypeHookPatch = bytecodePatch(
             )
         }
 
-        ReelWatchPagerFingerprint.let {
-            it.method.apply {
-                val alreadyHooked = implementation?.instructions?.any { inst ->
-                    inst.opcode == Opcode.INVOKE_STATIC &&
-                        (inst as? ReferenceInstruction)?.reference?.let { ref ->
-                            (ref as? MethodReference)?.let { mRef ->
-                                mRef.definingClass == EXTENSION_CLASS && mRef.name == "onShortsCreate"
-                            }
-                        } == true
-                } == true
-
-                if (!alreadyHooked) {
-                    val index = it.instructionMatches.last().index
-                    val register = getInstruction<OneRegisterInstruction>(index).registerA
-
-                    addInstruction(
-                        index + 1,
-                        "invoke-static { v$register }, $EXTENSION_CLASS->onShortsCreate(Landroid/view/View;)V"
-                    )
-                }
-            }
-        }
 
         val controlStateType = ControlsStateToStringFingerprint.originalClassDef.type
         val videoStateType = VideoStateEnumFingerprint.originalClassDef.type

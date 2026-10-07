@@ -103,7 +103,6 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting PLAYBACK_SPEED_CHANNEL_WHITELIST_FLYOUT_MENU = new BooleanSetting("morphe_playback_speed_channel_whitelist_flyout_menu", FALSE);
     public static final BooleanSetting ENABLE_PLAYBACK_AUDIO_PITCH = new BooleanSetting("morphe_enable_playback_audio_pitch_controls", FALSE, parent(CUSTOM_SPEED_MENU));
     public static final BooleanSetting PLAYBACK_AUDIO_TIME_STRETCHING = new BooleanSetting("morphe_playback_audio_time_stretching", FALSE, parentsAll(CUSTOM_SPEED_MENU, ENABLE_PLAYBACK_AUDIO_PITCH));
-    public static final BooleanSetting SMART_AUDIO_FOCUS = new BooleanSetting("morphe_smart_audio_focus", TRUE, true);
     public static final BooleanSetting RESTORE_OLD_SPEED_MENU = new BooleanSetting("morphe_restore_old_speed_menu", FALSE, parent(CUSTOM_SPEED_MENU));
     public static final StringSetting CUSTOM_PLAYBACK_SPEEDS = new StringSetting("morphe_custom_playback_speeds", "0.25\n0.5\n0.75\n1.0\n1.25\n1.5\n1.75\n2.0\n2.5\n3.0\n4.0\n5.0\n6.0\n7.0\n8.0", true);
 
@@ -191,7 +190,6 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting HIDE_LINKS_PREVIEW = new BooleanSetting("morphe_hide_links_preview", TRUE);
     public static final BooleanSetting HIDE_MEMBERS_ONLY_CHIP = new BooleanSetting("morphe_hide_members_only_chip", FALSE);
     public static final BooleanSetting HIDE_MEMBERS_SHELF = new BooleanSetting("morphe_hide_members_shelf", TRUE);
-    public static final BooleanSetting HIDE_MEMBERS_VIDEOS = new BooleanSetting("morphe_hide_members_videos", FALSE);
     public static final BooleanSetting HIDE_POSTS_SHELF = new BooleanSetting("morphe_hide_posts_shelf", TRUE);
     public static final BooleanSetting HIDE_STORE_BUTTON = new BooleanSetting("morphe_hide_store_button", TRUE);
     public static final BooleanSetting HIDE_SUBSCRIBE_BUTTON_IN_CHANNEL_PAGE = new BooleanSetting("morphe_hide_subscribe_button_in_channel_page", FALSE);
