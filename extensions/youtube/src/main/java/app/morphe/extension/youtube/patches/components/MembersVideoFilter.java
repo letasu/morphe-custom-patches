@@ -13,7 +13,6 @@ import app.morphe.extension.shared.patches.components.BufferAsciiStrings;
 import app.morphe.extension.shared.patches.components.ContextInterface;
 import app.morphe.extension.shared.patches.components.Filter;
 import app.morphe.extension.shared.patches.components.StringFilterGroup;
-import app.morphe.extension.shared.settings.BaseSettings;
 import app.morphe.extension.shared.settings.BooleanSetting;
 
 /**
@@ -23,7 +22,7 @@ import app.morphe.extension.shared.settings.BooleanSetting;
 public final class MembersVideoFilter extends Filter {
 
     public static final BooleanSetting HIDE_MEMBERS_VIDEOS =
-            new BooleanSetting("morphe_hide_members_videos", BaseSettings.FALSE, true);
+            new BooleanSetting("morphe_hide_members_videos", false, true);
 
     private static volatile boolean isRegistered = false;
 

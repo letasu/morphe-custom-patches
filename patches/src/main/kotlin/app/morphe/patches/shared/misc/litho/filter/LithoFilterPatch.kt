@@ -160,7 +160,7 @@ internal fun sharedLithoFilterPatch(
             val helperName = "patch_getFilterArray"
             val existingHelper = it.classDef.methods.firstOrNull { m -> m.name == helperName }
             if (existingHelper != null) {
-                helperMethodRef = WeakReference(existingHelper as? MutableMethod ?: existingHelper.toMutable())
+                helperMethodRef = WeakReference(existingHelper)
             } else {
                 it.method.apply {
                     // Add a helper method to avoid finding multiple free registers.

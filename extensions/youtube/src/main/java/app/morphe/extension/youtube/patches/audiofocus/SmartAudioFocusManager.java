@@ -14,7 +14,6 @@ import java.lang.reflect.Field;
 
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
-import app.morphe.extension.shared.settings.BaseSettings;
 import app.morphe.extension.shared.settings.BooleanSetting;
 import app.morphe.extension.youtube.shared.PlayerType;
 import app.morphe.extension.youtube.shared.VideoState;
@@ -28,7 +27,7 @@ import kotlin.Unit;
 public final class SmartAudioFocusManager {
 
     public static final BooleanSetting SMART_AUDIO_FOCUS =
-            new BooleanSetting("morphe_smart_audio_focus", BaseSettings.TRUE, true);
+            new BooleanSetting("morphe_smart_audio_focus", true, true);
 
     private static volatile boolean initialized = false;
 
