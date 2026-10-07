@@ -26,7 +26,7 @@ private const val EXTENSION_HEADER_ITEM_INTERFACE =
 
 @Suppress("unused")
 val hideSidebarComponentsPatch = bytecodePatch(
-    // name = "Hide sidebar components",
+    name = "Hide sidebar components",
     description = "Adds options to hide the sidebar components."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

@@ -69,7 +69,7 @@ private const val EXTENSION_SETTING_INTERFACE =
     $$"Lapp/morphe/extension/youtube/patches/NavigationBarPatch$SettingsController;"
 
 val navigationBarPatch = bytecodePatch(
-    // name = "Navigation bar",
+    name = "Navigation bar",
     description = "Adds options to hide and change the bottom navigation bar (such as the Shorts button) "
             + "and the upper navigation toolbar."
 ) {

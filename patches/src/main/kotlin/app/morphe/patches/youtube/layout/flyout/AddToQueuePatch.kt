@@ -39,7 +39,7 @@ private const val EXTENSION_UTILS_CLASS =
 
 @Suppress("unused")
 val addToQueuePatch = bytecodePatch(
-    // name = "Add to queue",
+    name = "Add to queue",
     description = "Overrides the feed flyout 'Play next in queue' with the Morphe video queue."
 ) {
     dependsOn(

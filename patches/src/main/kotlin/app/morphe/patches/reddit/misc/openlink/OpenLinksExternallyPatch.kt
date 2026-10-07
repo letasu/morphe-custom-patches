@@ -19,7 +19,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val openLinksExternallyPatch = bytecodePatch(
-    // name = "Open links externally",
+    name = "Open links externally",
     description = "Adds an option to always open links in your browser instead of with the in-app-browser."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

@@ -96,7 +96,7 @@ private const val SEARCH_LINKS_FILTER =
     "Lapp/morphe/extension/youtube/patches/spans/SearchLinksFilter;"
 
 val hideLayoutComponentsPatch = bytecodePatch(
-    // name = "Hide layout components",
+    name = "Hide layout components",
     description = "Adds options to hide general layout components."
 
 ) {

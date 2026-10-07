@@ -38,7 +38,7 @@ private const val EXTENSION_SEGMENT_PLAYBACK_CONTROLLER_CLASS =
 
 @Suppress("unused")
 val musicSponsorBlockPatch = bytecodePatch(
-    // name = "SponsorBlock",
+    name = "SponsorBlock",
     description = "Adds options to enable and configure SponsorBlock, which can skip non-music segments."
 ) {
     dependsOn(

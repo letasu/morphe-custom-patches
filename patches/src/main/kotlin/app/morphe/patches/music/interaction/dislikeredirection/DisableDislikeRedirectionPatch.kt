@@ -31,7 +31,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val disableDislikeRedirectionPatch = bytecodePatch(
-    // name = "Disable dislike redirection",
+    name = "Disable dislike redirection",
     description = "Adds an option to prevent skipping to the next track when the dislike " +
             "button is pressed."
 ) {

@@ -57,7 +57,7 @@ internal fun forceOriginalAudioPatch(
     subclassExtensionClassDescriptor: String,
     preferenceScreen: BasePreferenceScreen.Screen
 ) = bytecodePatch(
-    // name = "Force original audio",
+    name = "Force original audio",
     description = "Adds an option to always use the original audio track.",
 ) {
 

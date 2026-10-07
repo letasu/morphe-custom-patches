@@ -34,7 +34,7 @@ private const val EXTENSION_FILTER =
 
 @Suppress("unused")
 val hidePlayerFlyoutMenuComponentsPatch = bytecodePatch(
-    // name = "Hide player flyout menu components",
+    name = "Hide player flyout menu components",
     description = "Adds options to hide menu components that appear when pressing the gear icon in the video player."
 ) {
     dependsOn(

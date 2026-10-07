@@ -21,7 +21,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val hideAskButtonPatch = bytecodePatch(
-    // name = "Hide Ask button",
+    name = "Hide Ask button",
     description = "Adds an option to hide Ask button in the search bar."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

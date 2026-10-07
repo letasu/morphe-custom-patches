@@ -25,7 +25,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/Remembe
 
 @Suppress("unused")
 val rememberRepeatStatePatch = bytecodePatch(
-    // name = "Remember repeat state",
+    name = "Remember repeat state",
     description = "Adds an option to remember the repeat state when playing a new track or playlist."
 ) {
     dependsOn(

@@ -25,7 +25,7 @@ internal fun disableDRCAudioPatch(
     useLegacyNormalizationFlag: BytecodePatchBuilder.() -> Boolean,
     useNormalizationFlag: BytecodePatchBuilder.() -> Boolean
 ) = bytecodePatch(
-    // name = "Disable DRC audio",
+    name = "Disable DRC audio",
     description = "Adds an option to disable DRC (Dynamic Range Compression) audio."
 ) {
 

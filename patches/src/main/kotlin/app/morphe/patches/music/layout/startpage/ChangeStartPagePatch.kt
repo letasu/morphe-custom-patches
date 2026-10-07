@@ -27,7 +27,7 @@ import com.android.tools.smali.dexlib2.iface.reference.StringReference
 private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/ChangeStartPagePatch;"
 
 val changeStartPagePatch = bytecodePatch(
-    // name = "Change start page",
+    name = "Change start page",
     description = "Adds an option to set which page the app opens in instead of the homepage.",
 ) {
     dependsOn(

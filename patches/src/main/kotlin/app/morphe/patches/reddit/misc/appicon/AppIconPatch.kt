@@ -17,7 +17,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val appIconPatch = bytecodePatch(
-    // name = "App icon",
+    name = "App icon",
     description = "Adds an option to select from the Reddit app icons available in the manifest."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

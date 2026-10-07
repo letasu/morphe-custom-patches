@@ -31,7 +31,7 @@ private const val EXTENSION_TRENDING_INTERFACE =
 
 @Suppress("unused")
 val hideTrendingShelvesPatch = bytecodePatch(
-    // name = "Hide Trending shelves",
+    name = "Hide Trending shelves",
     description = "Adds an option to hide the Trending shelves from feed and search suggestions."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

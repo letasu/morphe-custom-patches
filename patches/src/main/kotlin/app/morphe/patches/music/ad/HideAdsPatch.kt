@@ -34,7 +34,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/HideAds
 
 @Suppress("unused")
 val hideAdsPatch = bytecodePatch(
-    // name = "Hide ads",
+    name = "Hide ads",
     description = "Adds options to hide fullscreen ads, Premium promotions and video ads."
 ) {
     dependsOn(

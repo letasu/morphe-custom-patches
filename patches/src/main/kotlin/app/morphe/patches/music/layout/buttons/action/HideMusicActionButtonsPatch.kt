@@ -32,7 +32,7 @@ private const val EXTENSION_BUTTON_PROTO_INTERFACE =
 
 @Suppress("unused")
 val hideMusicActionButtonsPatch = bytecodePatch(
-    // name = "Hide music action buttons",
+    name = "Hide music action buttons",
     description = "Adds options to hide action buttons under the player."
 ) {
     dependsOn(

@@ -18,7 +18,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val sanitizeSharingLinksPatch = bytecodePatch(
-    // name = "Sanitize sharing links",
+    name = "Sanitize sharing links",
     description = "Adds an option to sanitize sharing links by removing tracking query parameters."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

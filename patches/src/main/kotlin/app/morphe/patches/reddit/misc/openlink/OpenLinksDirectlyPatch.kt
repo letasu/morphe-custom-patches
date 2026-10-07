@@ -18,7 +18,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val openLinksDirectlyPatch = bytecodePatch(
-    // name = "Open links directly",
+    name = "Open links directly",
     description = "Adds an option to skip over redirection URLs in external links."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

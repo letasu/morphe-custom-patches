@@ -24,7 +24,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val playAlbumSongsPatch = bytecodePatch(
-    // name = "Play albums songs",
+    name = "Play albums songs",
     description = "Adds an option to play the song version of album tracks instead of music videos."
 ) {
     compatibleWith(COMPATIBILITY_YOUTUBE_MUSIC)

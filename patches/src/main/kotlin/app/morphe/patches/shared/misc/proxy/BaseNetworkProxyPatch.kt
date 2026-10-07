@@ -32,7 +32,7 @@ internal fun baseNetworkProxyPatch(
     block: BytecodePatchBuilder.() -> Unit,
     executeBlock: BytecodePatchContext.() -> Unit = {}
 ) = bytecodePatch(
-    // name = "Network proxy",
+    name = "Network proxy",
     description = "Adds settings to route supported network requests through an HTTP or HTTPS proxy. " +
             "Including this patch may cause connectivity problems on certain devices",
     default = false

@@ -18,7 +18,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val customFontPatch = bytecodePatch(
-    // name = "Custom font",
+    name = "Custom font",
     description = "Adds an option to replace Reddit Sans / Roboto with a custom TTF or OTF font file at runtime.",
     default = true,
 ) {

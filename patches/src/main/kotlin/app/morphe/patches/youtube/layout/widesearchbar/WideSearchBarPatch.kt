@@ -24,7 +24,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/youtube/patches/WideS
 
 @Suppress("unused")
 val wideSearchBarPatch = bytecodePatch(
-    // name = "Wide search bar",
+    name = "Wide search bar",
     description = "Adds a wide search bar to the top of the home and subscription feed."
 ) {
     dependsOn(

@@ -36,7 +36,7 @@ private const val EXTENSION_SLEEP_TIMER_INTERFACE =
     $$"Lapp/morphe/extension/youtube/patches/LoopVideoPatch$SleepTimerController;"
 
 val loopVideoPatch = bytecodePatch(
-    // name = "Loop video",
+    name = "Loop video",
     description = "Adds an option to loop videos and display loop video button in the video player.",
 ) {
     dependsOn(

@@ -21,7 +21,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val removeSubRedditDialogPatch = bytecodePatch(
-    // name = "Remove subreddit dialog",
+    name = "Remove subreddit dialog",
     description = "Adds options to remove the NSFW community warning and notifications suggestion dialogs by dismissing them automatically."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

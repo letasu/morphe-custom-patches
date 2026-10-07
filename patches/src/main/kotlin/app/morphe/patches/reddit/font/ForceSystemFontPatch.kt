@@ -18,7 +18,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val forceSystemFontPatch = bytecodePatch(
-    // name = "Force system font",
+    name = "Force system font",
     description = "Adds an option that renders Reddit with the device system font instead of Reddit Sans / Roboto.",
     default = true,
 ) {

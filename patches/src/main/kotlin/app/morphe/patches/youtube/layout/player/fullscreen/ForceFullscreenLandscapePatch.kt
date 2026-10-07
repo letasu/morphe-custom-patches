@@ -22,7 +22,7 @@ private const val EXTENSION_CLASS_FORCE_LANDSCAPE =
 
 @Suppress("unused")
 val forceFullscreenLandscapePatch = bytecodePatch(
-    // name = "Force fullscreen landscape",
+    name = "Force fullscreen landscape",
     description = "Adds an option to rotate the player to landscape when entering fullscreen mode " +
             "on tablets and other large screen devices.",
 ) {
