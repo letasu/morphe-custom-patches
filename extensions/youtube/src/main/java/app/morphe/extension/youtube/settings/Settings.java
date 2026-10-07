@@ -191,7 +191,7 @@ public class Settings extends SharedYouTubeSettings {
     public static final BooleanSetting HIDE_LINKS_PREVIEW = new BooleanSetting("morphe_hide_links_preview", TRUE);
     public static final BooleanSetting HIDE_MEMBERS_ONLY_CHIP = new BooleanSetting("morphe_hide_members_only_chip", FALSE);
     public static final BooleanSetting HIDE_MEMBERS_SHELF = new BooleanSetting("morphe_hide_members_shelf", TRUE);
-    public static final BooleanSetting HIDE_MEMBERS_VIDEOS = new BooleanSetting("morphe_hide_members_videos", FALSE, true);
+    public static final BooleanSetting HIDE_MEMBERS_VIDEOS = new BooleanSetting("morphe_hide_members_videos", FALSE);
     public static final BooleanSetting HIDE_POSTS_SHELF = new BooleanSetting("morphe_hide_posts_shelf", TRUE);
     public static final BooleanSetting HIDE_STORE_BUTTON = new BooleanSetting("morphe_hide_store_button", TRUE);
     public static final BooleanSetting HIDE_SUBSCRIBE_BUTTON_IN_CHANNEL_PAGE = new BooleanSetting("morphe_hide_subscribe_button_in_channel_page", FALSE);

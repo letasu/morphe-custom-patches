@@ -43,7 +43,7 @@ private const val CROSSFADE_MANAGER_CLASS = "Lapp/morphe/extension/music/patches
 
 @Suppress("unused")
 val enableSwipeToDismissMiniplayerPatch = bytecodePatch(
-    name = "Enable swipe to dismiss miniplayer",
+    // name = "Enable swipe to dismiss miniplayer",
     description = "Adds an option to enable dismissing the miniplayer by swiping down on it."
 ) {
     dependsOn(

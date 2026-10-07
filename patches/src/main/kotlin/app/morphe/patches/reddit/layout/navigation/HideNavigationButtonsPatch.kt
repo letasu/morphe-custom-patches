@@ -37,7 +37,7 @@ private const val EXTENSION_HEADER_ITEM_INTERFACE =
 
 @Suppress("unused")
 val hideNavigationButtonsPatch = bytecodePatch(
-    name = "Hide navigation buttons",
+    // name = "Hide navigation buttons",
     description = "Adds options to hide buttons in the navigation bar."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

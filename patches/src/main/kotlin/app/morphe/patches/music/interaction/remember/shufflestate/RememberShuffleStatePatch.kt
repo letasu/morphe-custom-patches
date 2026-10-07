@@ -40,7 +40,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/Remembe
 
 @Suppress("unused")
 val rememberShuffleStatePatch = bytecodePatch(
-    name = "Remember shuffle state",
+    // name = "Remember shuffle state",
     description = "Adds an option to remember the shuffle state when playing a new track or playlist."
 ) {
     dependsOn(

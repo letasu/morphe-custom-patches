@@ -95,7 +95,7 @@ private val miniplayerButtonsResourcePatch = resourcePatch(
 
 @Suppress("unused")
 val miniplayerPreviousNextButtonsPatch = bytecodePatch(
-    name = "Miniplayer previous and next buttons",
+    // name = "Miniplayer previous and next buttons",
     description = "Adds options to show previous and next track buttons in the miniplayer."
 ) {
     dependsOn(

@@ -173,7 +173,7 @@ private val crossfadeBannerResourcePatch = resourcePatch {
 
 @Suppress("unused")
 val crossfadePatch = bytecodePatch(
-    name = "Crossfade",
+    // name = "Crossfade",
     description = "Adds a true dual-player crossfade between consecutive tracks. " +
             "Requires YouTube Music 9.00 or newer; on older versions the patch is a no-op.",
 ) {
@@ -242,7 +242,7 @@ val crossfadePatch = bytecodePatch(
                         key = "morphe_music_crossfade_about",
                         sorting = PreferenceScreenPreference.Sorting.UNSORTED,
                         preferences = setOf(
-                            // Header banner (full-width crossfade graphic) — custom
+                            // Header banner (full-width crossfade graphic)  Ecustom
                             // ImageView layout, no title/summary.
                             NonInteractivePreference(
                                 key = "morphe_music_crossfade_about_banner",
@@ -276,12 +276,12 @@ val crossfadePatch = bytecodePatch(
 
         // #1671: notify the crossfade manager the instant a watch-page / queue
         // dismissal is processed (DismissWatchEvent handler).  This is dismiss-UNIQUE
-        // — the stock "Dismiss queue" menu and swipe-to-dismiss both post a
+        //  Ethe stock "Dismiss queue" menu and swipe-to-dismiss both post a
         // DismissWatchEvent, while a normal skip never does.  It fires before the
         // dismiss's stopVideo(5), so onQueueDismissed() arms a window that makes
         // onBeforeStopVideo pass that stop through instead of starting a phantom
         // crossfade.  (If this fingerprint ever misses, the poll-STATE_IDLE recovery
-        // still cleans up — just a touch slower.)
+        // still cleans up  Ejust a touch slower.)
         runCatching {
             HandleDismissWatchEventFingerprint.method.addInstruction(
                 0,
@@ -289,7 +289,7 @@ val crossfadePatch = bytecodePatch(
             )
         }.onFailure {
             log.warning(
-                "DismissWatchEvent handler not found — dismiss handling falls back to " +
+                "DismissWatchEvent handler not found  Edismiss handling falls back to " +
                         "poll-STATE_IDLE recovery (#1671): ${it.message}",
             )
         }
@@ -351,7 +351,7 @@ val crossfadePatch = bytecodePatch(
                         "onLoopStateChanged(Ljava/lang/Object;)V"
             )
         }.onFailure {
-            log.warning("Loop-state adapter not found — REPEAT_SINGLE " +
+            log.warning("Loop-state adapter not found  EREPEAT_SINGLE " +
                     "crossfade disabled (#repeat): ${it.message}")
         }
 
@@ -496,7 +496,7 @@ val crossfadePatch = bytecodePatch(
             mutableClassDefBy(sharedCallbackFieldRef.type)
         }
 
-        // 9.x single-attachment guard field — present only on 9.x.
+        // 9.x single-attachment guard field  Epresent only on 9.x.
         // The ExoPlayer constructor checks this field (on an abstract superclass of
         // sharedState) and refuses to attach if already set. We clear it before
         // calling the factory so the new player can attach to the coordinator.
@@ -519,7 +519,7 @@ val crossfadePatch = bytecodePatch(
         }
         if (guardField == null) {
             log.warning(
-                "9.x guard field not found in ${sharedStateClass.type} superclass chain — " +
+                "9.x guard field not found in ${sharedStateClass.type} superclass chain  E" +
                         "second player creation may fail. Fields searched from superclass of ${sharedStateClass.type}",
             )
         }
@@ -545,23 +545,23 @@ val crossfadePatch = bytecodePatch(
 
         // 9.x only: ForwardingPlayer (cwh) field on coordinator (auge.c:Lctr).
         // cwh wraps the ExoPlayer via cwh.g:Lcct (Player interface delegate field).
-        // MediaSession queries player state through coordinator → cwh → cwh.g.isPlaying().
+        // MediaSession queries player state through coordinator ↁEcwh ↁEcwh.g.isPlaying().
         // When patch_setPlayerWithBindings only writes auge.h (coordinator's ExoPlayer field),
-        // cwh.g still points to the old released player → isPlaying()=false → MediaSession PAUSED
+        // cwh.g still points to the old released player ↁEisPlaying()=false ↁEMediaSession PAUSED
         // on skip 2+ (first skip works because the old player is still alive during its fade-out).
         // 9.x event dispatch fix: crh.j (ExoPlayer field) + auih.k (coordinator listener).
         // Factory ExoPlayer has crh.j = factory_cwh (final, set in constructor, never changes).
         // crb (ExoPlayer's ComponentListener) reads crh.j to dispatch playback events to cwh.
         // coordinator_cwh (auih.c) has auih.k registered on its listener set.
         // After patch_setPlayerWithBindings swaps auih.h to factory_exo, events go to
-        // factory_cwh — NOT coordinator_cwh — so auih.k never gets notified and
+        // factory_cwh  ENOT coordinator_cwh  Eso auih.k never gets notified and
         // MediaSession stays permanently PAUSED.
         // Fix: read factory_cwh from factory_exo.j, then register auih.k on factory_cwh.
         val forwardingPlayerField9x: Field?
         var exoPlayerCwhField9x: Field? = null
         var cwhListenerType: String? = null
         var coordinatorCwhListenerField9x: Field? = null
-        // crh.h:Lcgd — per-player event dispatch set; coordinator_cwh is registered here via crh.C().
+        // crh.h:Lcgd  Eper-player event dispatch set; coordinator_cwh is registered here via crh.C().
         // Removing coordinator_cwh from the outgoing player's crh.h before release prevents the
         // release's isPlayingChanged(false) from propagating to MediaSession via cwh.b.
         var eventDispatchField9x: Field? = null
@@ -583,21 +583,21 @@ val crossfadePatch = bytecodePatch(
             } catch (_: Exception) { false }
         }.also { f ->
             if (f == null) log.warning(
-                "9.x: Lctr (cwh interface) field not found on coordinator — crh.j fix skipped"
+                "9.x: Lctr (cwh interface) field not found on coordinator  Ecrh.j fix skipped"
             ) else log.fine { "9.x: coordinator cwh field (auih.c) = $f" }
         }
 
         val lctrType = forwardingPlayerField9x?.type
         if (lctrType != null) {
-            // crh.j: Lctr-typed field on ExoPlayer — crb reads this to dispatch events.
+            // crh.j: Lctr-typed field on ExoPlayer  Ecrb reads this to dispatch events.
             exoPlayerCwhField9x = exoPlayerImplClass.fields.firstOrNull { f ->
                 !AccessFlags.STATIC.isSet(f.accessFlags) && f.type == lctrType
             }.also { f ->
-                if (f == null) log.warning("9.x: crh.j (Lctr on ExoPlayer) not found — crh.j fix skipped")
+                if (f == null) log.warning("9.x: crh.j (Lctr on ExoPlayer) not found  Ecrh.j fix skipped")
                 else log.fine { "9.x: ExoPlayer cwh field (crh.j) = $f" }
             }
 
-            // Lctu: listener interface — parameter of Lctr.B(Lctu)V (addListener).
+            // Lctu: listener interface  Eparameter of Lctr.B(Lctu)V (addListener).
             cwhListenerType = try {
                 classDefBy(lctrType).methods
                     .firstOrNull { m -> m.name == "B" && m.parameterTypes.size == 1 && m.returnType == "V" }
@@ -613,7 +613,7 @@ val crossfadePatch = bytecodePatch(
                             && f.type != lctrType
                             && try { cwhListenerType in classDefBy(f.type).interfaces } catch (_: Exception) { false }
                 }.also { f ->
-                    if (f == null) log.warning("9.x: coordinator cwh listener field (auih.k) not found — crh.j fix skipped")
+                    if (f == null) log.warning("9.x: coordinator cwh listener field (auih.k) not found  Ecrh.j fix skipped")
                     else log.fine { "9.x: coordinator cwh listener field (auih.k) = $f" }
                 }
             }
@@ -625,8 +625,7 @@ val crossfadePatch = bytecodePatch(
             //
             // Identify Lcgd structurally (avoid relying on R8-obfuscated method names
             // like "a" / "e" which can drift across major YTM versions): the class wraps a
-            // CopyOnWriteArraySet and has at least two methods of signature (Object):V —
-            // one adds, the other removes.  This is the listener-set wrapper pattern.
+            // CopyOnWriteArraySet and has at least two methods of signature (Object):V  E            // one adds, the other removes.  This is the listener-set wrapper pattern.
             eventDispatchField9x = exoPlayerImplClass.fields.firstOrNull { f ->
                 !AccessFlags.STATIC.isSet(f.accessFlags)
                         && f.type != lctrType
@@ -643,7 +642,7 @@ val crossfadePatch = bytecodePatch(
                     hasCopyOnWriteSet && objectVoidMethodCount >= 2
                 } catch (_: Exception) { false }
             }.also { f ->
-                if (f == null) log.warning("9.x: crh.h (Lcgd event dispatch) not found — detach-cwh fix skipped")
+                if (f == null) log.warning("9.x: crh.h (Lcgd event dispatch) not found  Edetach-cwh fix skipped")
                 else log.fine { "9.x: ExoPlayer event dispatch field (crh.h:Lcgd) = $f" }
             }
         }
@@ -888,7 +887,7 @@ val crossfadePatch = bytecodePatch(
         //
         // 9.10-9.21: a single recursively-wrapped decorator (atux/auyx) - one match.
         // 9.23+: multiple distinct decorators (e.g. avel + avfa) - all must match,
-        // else the walk dies on the first uncovered hop (#9.23 "Traversed 0 → avfa").
+        // else the walk dies on the first uncovered hop (#9.23 "Traversed 0 ↁEavfa").
         // Subclasses that only INHERIT the interface+field (e.g. avfg extends avel)
         // are intentionally NOT matched here - they inherit DelegateAccess and the
         // delegate field from their injected base.
@@ -915,7 +914,7 @@ val crossfadePatch = bytecodePatch(
         // Found by looking for NEW_INSTANCE instructions in cau's methods.
         //
         // Match the element class structurally (avoid R8 name "a"): any class allocated
-        // via NEW_INSTANCE inside cau's methods that has an Object-typed field — that
+        // via NEW_INSTANCE inside cau's methods that has an Object-typed field  Ethat
         // field holds the actual listener reference.  Use the FIRST Object-typed field
         // (typically there's only one; if there are more, the first is the listener slot
         // because R8 puts the constructor-assigned field first).
@@ -959,7 +958,7 @@ val crossfadePatch = bytecodePatch(
                 dltOnShared    = $dltCallbackTypeOnShared
                 dltOnExo       = $dltFieldOnExo
                 internalLsnr   = $internalListenerField
-                listenerWrap   = $listenerWrapperField → $listenerSetInWrapper
+                listenerWrap   = $listenerWrapperField ↁE$listenerSetInWrapper
                 playerChain    = $playerChainField
                 guardField     = ${guardField?.let { "$guardAbstractType->${it.name}:${it.type}" } ?: "n/a (8.x)"}
             """
@@ -978,8 +977,7 @@ val crossfadePatch = bytecodePatch(
 
         // patch_playNextInQueueDirect: calls the coordinator's own playNextInQueue (auih.y()V)
         // directly via invoke-virtual. This is required because the auto-advance monitor and
-        // onBeforePlayNext re-invoke cannot use atad.patch_playNextInQueue() (atzq.p()V) —
-        // that method calls invoke-interface Lausd->y()V, but auih does NOT implement Lausd,
+        // onBeforePlayNext re-invoke cannot use atad.patch_playNextInQueue() (atzq.p()V)  E        // that method calls invoke-interface Lausd->y()V, but auih does NOT implement Lausd,
         // so the call never reaches the hooked auih.y()V and onBeforePlayNext never fires.
         val coordinatorPlayNextMethod = PlayNextInQueueFingerprint.method
         coordinatorClass.methods.add(
@@ -1007,7 +1005,7 @@ val crossfadePatch = bytecodePatch(
         // Find the coordinator's internal method that properly handles player transitions.
         // Unlike a raw iput-object, this method: reads the old player from the field,
         // calls removeListener on it, writes the new player, calls addListener on the new
-        // player — keeping the coordinator's MedialibPlayerEvents listener properly bound.
+        // player  Ekeeping the coordinator's MedialibPlayerEvents listener properly bound.
         // Identified by: (a) writes to exoPlayerField, (b) has virtual/interface calls.
         val exoFieldName = exoPlayerField.name
         // Compatible types: the exact ExoPlayer type, the Player interface, or Object.
@@ -1051,7 +1049,7 @@ val crossfadePatch = bytecodePatch(
             if (coordinatorPlayerTransitionMethod != null)
                 "Coordinator player-transition method found: $coordinatorPlayerTransitionMethod"
             else
-                "Coordinator player-transition method NOT found — patch_setPlayerWithBindings uses raw iput-object fallback"
+                "Coordinator player-transition method NOT found  Epatch_setPlayerWithBindings uses raw iput-object fallback"
         }
 
         // patch_setPlayerWithBindings: calls the internal transition method (preferred)
@@ -1078,13 +1076,13 @@ val crossfadePatch = bytecodePatch(
                     } else if (forwardingPlayerField9x != null && exoPlayerCwhField9x != null && coordinatorCwhListenerField9x != null && cwhListenerType != null) {
                         // 9.x fix: register coordinator's cwh listener (auih.k) on factory_cwh.
                         // crb (ExoPlayer's ComponentListener) dispatches ALL playback events to
-                        // crh.j — a public final field on ExoPlayer set once in the constructor.
+                        // crh.j  Ea public final field on ExoPlayer set once in the constructor.
                         // After swapping auih.h to factory_exo, events go to factory_cwh (crh.j),
-                        // but auih.k was only registered on coordinator_cwh.b — so MediaSession
+                        // but auih.k was only registered on coordinator_cwh.b  Eso MediaSession
                         // never got PLAYING events.
                         // Fix: read factory_cwh from factory_exo.j, then call factory_cwh.B(auih.k).
                         // Cast to concrete crh type so verifier allows iget-object on crh.j.
-                        // transitionParamType is the ExoPlayer interface — not enough for
+                        // transitionParamType is the ExoPlayer interface  Enot enough for
                         // iget on a field declared on the concrete impl class Lcrh;.
                         val lctrType = forwardingPlayerField9x.type
                         val concreteExoType = exoPlayerImplClass.type
@@ -1215,7 +1213,7 @@ val crossfadePatch = bytecodePatch(
         exoPlayerImplClass.addExoBridgeVoid("patch_setPlayWhenReady", setPlayWhenReadyName, "Z")
         exoPlayerImplClass.addExoBridgeVoid("patch_release", releaseName)
 
-        // patch_addListener — calls cau.add(rawListener) on this player's listener wrapper,
+        // patch_addListener  Ecalls cau.add(rawListener) on this player's listener wrapper,
         // creating a fresh cat wrapper properly bound to the new player.
         //
         // The NEW_INSTANCE of cat lives inside cau.add() (the ListenerHolderSet.add method),
@@ -1236,12 +1234,12 @@ val crossfadePatch = bytecodePatch(
         val cauAddParamType = cauAddMethod?.parameterTypes?.first()?.toString()
         log.fine {
             if (cauAddMethod != null)
-                "patch_addListener → ${listenerWrapperClass.type}->${cauAddMethod.name}($cauAddParamType) [via wrapper]"
+                "patch_addListener ↁE${listenerWrapperClass.type}->${cauAddMethod.name}($cauAddParamType) [via wrapper]"
             else
-                "patch_addListener: cau.add method not found — injecting no-op fallback"
+                "patch_addListener: cau.add method not found  Einjecting no-op fallback"
         }
 
-        // 9.x: direct listener set (Lcrh.N) — a CopyOnWriteArraySet field directly on
+        // 9.x: direct listener set (Lcrh.N)  Ea CopyOnWriteArraySet field directly on
         // ExoPlayerImpl (NOT the cau ListenerHolderSet). The coordinator's b:Lcou listener
         // is registered here via O(Lcou;)V. We need direct access to move it on player swap.
         val directListenerSetField =
@@ -1252,7 +1250,7 @@ val crossfadePatch = bytecodePatch(
                 else log.fine { "9.x: direct listener set field = $f" }
             }
 
-        // 9.x: coordinator's Player.Listener field (auge.b:Lcou) — Player.Listener type
+        // 9.x: coordinator's Player.Listener field (auge.b:Lcou)  EPlayer.Listener type
         // is the same as cauAddParamType (the type cau.add() accepts).
         val coordinatorListenerField = if (cauAddParamType != null) {
             (coordinatorClass.fields.firstOrNull { it.type == cauAddParamType }
@@ -1289,7 +1287,7 @@ val crossfadePatch = bytecodePatch(
             }
         )
 
-        // patch_getListenerSet navigates through the wrapper: cpp.h → cau.c
+        // patch_getListenerSet navigates through the wrapper: cpp.h ↁEcau.c
         exoPlayerImplClass.methods.add(
             ImmutableMethod(
                 exoPlayerImplClass.type,
@@ -1360,7 +1358,7 @@ val crossfadePatch = bytecodePatch(
                     )
                 }
             )
-            // patch_getDirectListenerCount — returns Lcrh.N.size() for diagnostic logging.
+            // patch_getDirectListenerCount  Ereturns Lcrh.N.size() for diagnostic logging.
             // Lets us verify that patch_addDirectListener actually registered the listener.
             exoPlayerImplClass.methods.add(
                 ImmutableMethod(
@@ -1383,7 +1381,7 @@ val crossfadePatch = bytecodePatch(
             log.fine { "9.x: injected patch_addDirectListener / patch_removeDirectListener / patch_getDirectListenerCount on ${exoPlayerImplClass.type}" }
         }
 
-        // 9.x only: patch_detachCwhFromEventDispatch — removes coordinator_cwh from this
+        // 9.x only: patch_detachCwhFromEventDispatch  Eremoves coordinator_cwh from this
         // ExoPlayer's crh.h:Lcgd event dispatch set. Called on the OUTGOING player before
         // it is released so its release-time isPlayingChanged(false) doesn't reach MediaSession
         // via cwh.b (the boolean is captured at source and never re-queried from cwh.g).
@@ -1407,7 +1405,7 @@ val crossfadePatch = bytecodePatch(
                     } == true
             }?.name ?: "e"  // fallback to historical name if bytecode scan fails
 
-            log.fine { "9.x: Lcgd remove method resolved → $cgdType->$cgdRemoveMethodName(Object):V" }
+            log.fine { "9.x: Lcgd remove method resolved ↁE$cgdType->$cgdRemoveMethodName(Object):V" }
 
             exoPlayerImplClass.methods.add(
                 ImmutableMethod(
@@ -1436,21 +1434,21 @@ val crossfadePatch = bytecodePatch(
         // Root cause of the pause/seek UI regression:
         //   crh.P() (ExoPlayer.release()) calls crh.j.U()V on the SHARED singleton cwh.
         //   cwh.U() posts a Lcvu Runnable to cwh.h (the handler).
-        //   cvu.run() then calls cwh.b.d() — releasing the Lcgd that holds cwh's Lctu
+        //   cvu.run() then calls cwh.b.d()  Ereleasing the Lcgd that holds cwh's Lctu
         //   listeners, including auih.k (the MediaSession listener).
         //   cgd.d() calls CopyOnWriteArraySet.clear() AND sets cgd.i = true (prevents
         //   future adds). All listeners are gone; MediaSession can no longer receive any
         //   events (isPlayingChanged, onPositionDiscontinuity, etc.).
         //
         // In normal (non-crossfade) operation there is only one ExoPlayer, so destroying
-        // cwh.b on release is fine — there is no subsequent player to receive events.
+        // cwh.b on release is fine  Ethere is no subsequent player to receive events.
         // In crossfade, two ExoPlayer instances share the SAME cwh singleton. Releasing
         // the old player must NOT destroy the shared listener infrastructure used by
         // the new player.
         //
         // Fix: inject an early-return at the top of cwh.U()V that checks the static
         // CrossfadeManager.suppressCwhU flag. releasePlayer() sets it true before
-        // calling patch_release() and false in a finally block — synchronously blocking
+        // calling patch_release() and false in a finally block  Esynchronously blocking
         // the Runnable from ever being posted, leaving cwh.b intact.
         if (eventDispatchField9x != null && forwardingPlayerField9x != null) {
             val cgdType = eventDispatchField9x.type
@@ -1494,7 +1492,7 @@ val crossfadePatch = bytecodePatch(
         // On 9.x, the ExoPlayer constructor checks a single-attachment guard field on
         // the sharedState's abstract superclass and refuses to attach if it's already
         // set. We clear it before calling the factory so the new player can attach.
-        // On 8.x no guard exists — simple 4-register bridge.
+        // On 8.x no guard exists  Esimple 4-register bridge.
         factoryClass.interfaces.add(FACTORY_INTERFACE)
         val needsGuardClear = guardField != null
         val guardClearSmali = if (needsGuardClear) {
@@ -1778,7 +1776,7 @@ val crossfadePatch = bytecodePatch(
 
         // --- Silent mode set: bypass reactive broadcast (chxp) ---
         //
-        // patch_forceAudioMode() calls nlw.setState → chxp.mo6606iF which
+        // patch_forceAudioMode() calls nlw.setState ↁEchxp.mo6606iF which
         // broadcasts to ALL subscribers including nmi, which triggers a
         // navigation/jump that fires stopVideo(5). On repeated video→audio
         // crossfades, the blocked jumps corrupt the loading pipeline.
@@ -1935,7 +1933,7 @@ val crossfadePatch = bytecodePatch(
             }
         )
 
-        // patch_restoreVideoMode (BROADCAST variant) — used when the user pauses crossfade
+        // patch_restoreVideoMode (BROADCAST variant)  Eused when the user pauses crossfade
         // to resync YTM's subscribers (nmi etc.) that may have stale cached state from
         // prior silent toggles.  Calling the broadcast setStateMethod fires chxp.mo6606iF
         // which iterates subscribers; subscribers reconcile, and the next user-initiated
@@ -1968,7 +1966,7 @@ val crossfadePatch = bytecodePatch(
         // Songs loaded from the main feed never trigger shouldBlockVideoToggle (which
         // only fires on an explicit audio/video toggle interaction), leaving lastNbaRef
         // null for the entire session. The constructor hook ensures onNbaCreated() runs
-        // as soon as nba is instantiated — before any crossfade is attempted.
+        // as soon as nba is instantiated  Ebefore any crossfade is attempted.
         videoToggleClass.methods
             .filter { AccessFlags.CONSTRUCTOR.isSet(it.accessFlags) && it.name == "<init>" }
             .maxByOrNull { it.implementation?.instructions?.size ?: 0 }

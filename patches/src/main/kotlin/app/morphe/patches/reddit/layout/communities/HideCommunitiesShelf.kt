@@ -22,7 +22,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val hideCommunitiesShelf = bytecodePatch(
-    name = "Hide communities shelf",
+    // name = "Hide communities shelf",
     description = "Adds an option to hide the related or suggested communities shelf in subreddits."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

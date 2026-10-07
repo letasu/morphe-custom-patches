@@ -29,7 +29,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val hideAdsPatch = bytecodePatch(
-    name = "Hide ads",
+    // name = "Hide ads",
     description = "Adds options to hide ads."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

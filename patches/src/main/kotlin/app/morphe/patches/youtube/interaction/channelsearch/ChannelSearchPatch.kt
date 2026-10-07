@@ -33,7 +33,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/youtube/patches/Chann
 
 @Suppress("unused")
 val channelSearchPatch = bytecodePatch(
-    name = "Channel search",
+    // name = "Channel search",
     description = "Adds an option to search inside the channel that is currently open " +
             "instead of searching all of YouTube.",
 ) {

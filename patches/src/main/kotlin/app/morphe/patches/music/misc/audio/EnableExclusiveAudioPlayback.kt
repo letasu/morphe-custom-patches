@@ -19,7 +19,7 @@ import app.morphe.util.returnEarly
 
 @Suppress("unused")
 val enableExclusiveAudioPlaybackPatch = bytecodePatch(
-    name = "Enable exclusive audio playback",
+    // name = "Enable exclusive audio playback",
     description = "Enables the option to play audio without video.",
 ) {
     dependsOn(

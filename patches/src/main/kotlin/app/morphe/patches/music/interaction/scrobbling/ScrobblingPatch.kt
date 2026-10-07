@@ -36,7 +36,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/scrobbl
 
 @Suppress("unused")
 val scrobblingPatch = bytecodePatch(
-    name = "Scrobbling",
+    // name = "Scrobbling",
     description = "Adds options to add played tracks to Last.fm and ListenBrainz."
 ) {
     dependsOn(

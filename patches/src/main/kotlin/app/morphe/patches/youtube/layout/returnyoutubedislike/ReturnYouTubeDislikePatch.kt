@@ -54,7 +54,7 @@ private const val EXTENSION_CLASS =
     "Lapp/morphe/extension/youtube/patches/ReturnYouTubeDislikePatch;"
 
 val returnYouTubeDislikePatch = bytecodePatch(
-    name = "Return YouTube Dislike",
+    // name = "Return YouTube Dislike",
     description = "Adds an option to show the dislike count of videos with Return YouTube Dislike.",
 ) {
     dependsOn(

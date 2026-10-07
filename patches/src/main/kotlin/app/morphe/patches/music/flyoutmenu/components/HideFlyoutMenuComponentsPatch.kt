@@ -38,7 +38,7 @@ private const val PLAYER_FLYOUT_MENU_COMPONENTS_FILTER =
 
 @Suppress("unused")
 val hideFlyoutMenuComponentsPatch = bytecodePatch(
-    name = "Hide flyout menu components",
+    // name = "Hide flyout menu components",
     description = "Adds options to hide individual items from the player and queue flyout menus."
 ) {
     dependsOn(

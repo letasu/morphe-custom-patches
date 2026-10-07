@@ -2,12 +2,12 @@ group = "app.morphe"
 
 patches {
     about {
-        name = "Morphe Patches"
-        description = "Patches for Morphe"
-        source = "git@github.com:MorpheApp/morphe-patches.git"
-        author = "MorpheApp"
+        name = "Letasu Patches"
+        description = "Custom patches by letasu (Hide members videos, Smart audio focus)"
+        source = "git@github.com:letasu/morphe-custom-patches.git"
+        author = "letasu"
         contact = "na"
-        website = "https://morphe.software"
+        website = "https://github.com/letasu/morphe-custom-patches"
         license = "GNU General Public License v3.0, with additional GPL section 7 requirements"
     }
 }

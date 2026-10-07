@@ -18,7 +18,7 @@ private const val APP_NAME = "Reddit Morphe"
 
 @Suppress("unused")
 val customBrandingNamePatch = resourcePatch(
-    name = "Custom branding name for Reddit",
+    // name = "Custom branding name for Reddit",
     description = "Changes the Reddit app name to the name specified in patch options.",
     default = false
 ) {

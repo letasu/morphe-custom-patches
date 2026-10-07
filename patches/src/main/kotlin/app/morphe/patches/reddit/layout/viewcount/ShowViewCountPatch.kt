@@ -19,7 +19,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val showViewCountPatch = bytecodePatch(
-    name = "Show view count",
+    // name = "Show view count",
     description = "Adds an option to show the view count of Posts."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

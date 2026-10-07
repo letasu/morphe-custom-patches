@@ -2,6 +2,8 @@ package app.morphe.extension.youtube.patches.components;
 
 import androidx.annotation.Nullable;
 
+import java.util.Locale;
+
 import app.morphe.extension.shared.ByteTrieSearch;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.patches.components.BufferAsciiStrings;
@@ -21,23 +23,42 @@ public final class MembersVideoFilter extends Filter {
                     // InnerTube style constants (language-independent)
                     "BADGE_STYLE_TYPE_MEMBERS_ONLY",
                     "BADGE_STYLE_TYPE_MEMBERS_FIRST",
+                    "BADGE_STYLE_TYPE_MEMBERSHIP",
                     "badge-style-type-members-only",
                     "badge-style-type-members-first",
+                    "badge-style-type-membership",
                     "MEMBERS_ONLY",
                     "MEMBERS_FIRST",
+                    "MEMBERSHIP",
+                    "members_only",
+                    "members_first",
+                    "members-only",
+                    "members-first",
 
-                    // Membership badge icons
+                    // Membership badge icons & protobuf tags
                     "yt_outline_sponsor_stars",
+                    "yt_fill_sponsor_stars",
                     "yt_outline_membership",
                     "yt_fill_membership",
+                    "sponsor_stars",
+                    "sponsorships",
+                    "SPONSORSHIPS",
+                    "sponsors_only",
+                    "SPONSORS_ONLY",
 
                     // Multi-language text indicators in protobuf buffer
                     "Members only",
                     "Members-only",
                     "Members first",
                     "Members-first",
+                    "Member only",
+                    "Member-only",
+                    "Member first",
+                    "Member-first",
                     "メンバー限定",
-                    "メンバー先行"
+                    "メンバー先行",
+                    "メンバーシップ",
+                    "メンバー専用"
             )
     );
 
@@ -56,8 +77,11 @@ public final class MembersVideoFilter extends Filter {
                 // Shelf cards and related items
                 "video_card.e",
                 "related_video_with_context.e",
+                "grid_video.e",
                 "inline_shorts",
-                "shorts_video_cell"
+                "shorts_video_cell",
+                "shorts_lockup_cell.e",
+                "shorts_pivot_item.e"
         );
 
         addPathCallbacks(videoCards);
@@ -76,13 +100,40 @@ public final class MembersVideoFilter extends Filter {
             return true;
         }
 
+        if (asciiStrings != null) {
+            String ascii = asciiStrings.getStrings();
+            if (ascii.contains("BADGE_STYLE_TYPE_MEMBERS_ONLY")
+                    || ascii.contains("BADGE_STYLE_TYPE_MEMBERS_FIRST")
+                    || ascii.contains("BADGE_STYLE_TYPE_MEMBERSHIP")
+                    || ascii.contains("badge-style-type-members-only")
+                    || ascii.contains("badge-style-type-members-first")
+                    || ascii.contains("yt_outline_sponsor_stars")
+                    || ascii.contains("yt_fill_sponsor_stars")
+                    || ascii.contains("yt_outline_membership")
+                    || ascii.contains("yt_fill_membership")
+                    || ascii.contains("sponsorships")
+                    || ascii.contains("sponsor_stars")
+                    || ascii.contains("Members only")
+                    || ascii.contains("Members-only")
+                    || ascii.contains("Members first")
+                    || ascii.contains("Members-first")) {
+                Logger.printDebug(() -> "MembersVideoFilter: Filtered members video (ascii match): " + path);
+                return true;
+            }
+        }
+
         if (accessibility != null && !accessibility.isEmpty()) {
-            if (accessibility.contains("Members only")
-                    || accessibility.contains("Members-only")
-                    || accessibility.contains("Members first")
-                    || accessibility.contains("Members-first")
+            String lower = accessibility.toLowerCase(Locale.ROOT);
+            if (lower.contains("members only")
+                    || lower.contains("members-only")
+                    || lower.contains("members first")
+                    || lower.contains("members-first")
+                    || lower.contains("member only")
+                    || lower.contains("member first")
                     || accessibility.contains("メンバー限定")
-                    || accessibility.contains("メンバー先行")) {
+                    || accessibility.contains("メンバー先行")
+                    || accessibility.contains("メンバー専用")
+                    || accessibility.contains("メンバーシップ")) {
                 Logger.printDebug(() -> "MembersVideoFilter: Filtered members video (accessibility match): " + path);
                 return true;
             }

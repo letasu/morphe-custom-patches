@@ -20,7 +20,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val disableScreenshotPopupPatch = bytecodePatch(
-    name = "Disable screenshot popup",
+    // name = "Disable screenshot popup",
     description = "Adds an option to disable the popup that appears when taking a screenshot."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

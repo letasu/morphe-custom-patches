@@ -87,7 +87,7 @@ private const val EXTENSION_PROTOCOL_BUFFER_INTERFACE =
 
 @Suppress("unused")
 val downloadsPatch = bytecodePatch(
-    name = "Downloads",
+    // name = "Downloads",
     description = "Adds support to download songs using the in-app download button, " +
         "either with an external downloader app or inside YouTube Music.",
 ) {

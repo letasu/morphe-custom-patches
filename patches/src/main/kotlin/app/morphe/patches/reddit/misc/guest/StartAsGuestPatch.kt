@@ -13,7 +13,7 @@ import app.morphe.util.returnEarly
 
 @Suppress("unused")
 val startAsGuestPatch = bytecodePatch(
-    name = "Start as guest",
+    // name = "Start as guest",
     description = "Skips the forced startup login screen using Reddit's native guest browsing mode."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT)

@@ -34,7 +34,7 @@ private const val LAYOUT_COMPONENTS_FILTER =
 
 @Suppress("unused")
 val hideLayoutComponentsPatch = bytecodePatch(
-    name = "Hide layout components",
+    // name = "Hide layout components",
     description = "Adds options to hide general layout components."
 ) {
     dependsOn(

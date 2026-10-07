@@ -20,7 +20,7 @@ private const val EXTENSION_CLASS =
 
 @Suppress("unused")
 val spoofSignaturePatch = bytecodePatch(
-    name = "Spoof signature",
+    // name = "Spoof signature",
     description = "Spoofs the signature of the app to fix notification issues."
 ) {
     compatibleWith(COMPATIBILITY_REDDIT_INCLUDING_LEGACY)

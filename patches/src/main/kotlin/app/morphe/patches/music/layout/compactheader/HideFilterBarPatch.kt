@@ -14,7 +14,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/HideFil
 
 @Suppress("unused")
 val hideFilterBarPatch = bytecodePatch(
-    name = "Hide filter bar",
+    // name = "Hide filter bar",
     description = "Adds an option to hide the filter bar at the top of the homepage."
 ) {
     dependsOn(

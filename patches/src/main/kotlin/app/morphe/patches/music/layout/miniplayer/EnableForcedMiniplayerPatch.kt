@@ -25,7 +25,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/EnableF
 
 @Suppress("unused")
 val enableForcedMiniplayerPatch = bytecodePatch(
-    name = "Enable forced miniplayer",
+    // name = "Enable forced miniplayer",
     description = "Adds an option to enable forced miniplayer when switching between music videos, podcasts, or songs."
 ) {
     dependsOn(

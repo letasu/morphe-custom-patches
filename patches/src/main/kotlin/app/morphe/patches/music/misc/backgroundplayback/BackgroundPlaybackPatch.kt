@@ -8,7 +8,7 @@ import app.morphe.patches.shared.misc.fix.bitmap.fixRecycledBitmapPatch
 import app.morphe.util.returnEarly
 
 val backgroundPlaybackPatch = bytecodePatch(
-    name = "Remove background playback restrictions",
+    // name = "Remove background playback restrictions",
     description = "Removes restrictions on background playback, including playing kids videos in the background.",
 ) {
     dependsOn(

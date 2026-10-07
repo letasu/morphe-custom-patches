@@ -34,7 +34,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/ChangeM
 
 @Suppress("unused")
 val changeMiniplayerColorPatch = bytecodePatch(
-    name = "Change miniplayer color",
+    // name = "Change miniplayer color",
     description = "Adds an option to change the miniplayer background color to match the fullscreen player."
 ) {
     dependsOn(
