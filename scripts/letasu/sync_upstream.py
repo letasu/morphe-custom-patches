@@ -20,7 +20,8 @@ CUSTOM_FILES = {
     "patches/src/main/kotlin/app/morphe/patches/youtube/layout/hide/members/HideMembersVideosPatch.kt",
 }
 OWN_FILES = {"README.md", "patches-bundle.json", "patches-list.json", "RELEASE_NOTES.md"}
-OWN_PREFIXES = (".letasu/", "scripts/letasu/", "tests/audiofocus/", "tests/release/", ".github/workflows/")
+OWN_PREFIXES = (".letasu/", "scripts/letasu/", "tests/audiofocus/", "tests/release/",
+                ".github/workflows/", ".github/actions/letasu-build/")
 RESOURCE_FILES = [f"patches/src/main/resources/addresources/{locale}/youtube/strings.xml"
                   for locale in ("values", "values-ja-rJP")]
 RESOURCE_PATTERN = re.compile(
@@ -32,8 +33,8 @@ def owned(name):
 
 
 def safe_path(name):
-    parts = PurePosixPath(name).parts
-    if not parts or any(part in ("..", ".git") for part in parts):
+    parts = PurePosixPath(name.replace("\\", "/")).parts
+    if not parts or any(part == ".." or part.casefold() == ".git" for part in parts):
         raise ValueError(f"Unsafe archive path: {name}")
     target = (ROOT / name).resolve()
     if not target.is_relative_to(ROOT) or target == ROOT:

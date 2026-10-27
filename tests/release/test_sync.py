@@ -16,12 +16,13 @@ spec.loader.exec_module(sync)
 class SyncTest(unittest.TestCase):
     def test_owned_boundaries(self):
         self.assertTrue(sync.owned(".github/workflows/crowdin_pull.yml"))
+        self.assertTrue(sync.owned(".github/actions/letasu-build/action.yml"))
         self.assertTrue(sync.owned("README.md"))
         self.assertTrue(all(sync.owned(name) for name in sync.CUSTOM_FILES))
         self.assertFalse(sync.owned("extensions/youtube/build.gradle.kts"))
 
     def test_reject_external_paths(self):
-        for name in ("../outside", ".git/config", "./.git/config", "/outside"):
+        for name in ("../outside", ".git/config", "./.git/config", ".git\\config", ".GIT/config", "/outside"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 sync.safe_path(name)
 

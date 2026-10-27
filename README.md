@@ -268,7 +268,17 @@
 
 <!-- PATCHES_END -->
 
-## 本家更新の取り込み・保守
+## GitHub Actionsによる自動更新
+
+[Sync upstream stable patches](https://github.com/letasu/morphe-custom-patches/actions/workflows/sync_upstream.yml) が6時間ごとに本家の最新正式版を確認します。PCやCodexの起動、個人用トークンの登録は不要です。
+
+更新があれば、独自パッチ2つを残して本家のソースを取り込み、バージョン・互換対象・パッチ一覧を更新します。回帰テストと本家のテスト、配布用ビルドに成功した候補だけを正式公開します。公開ファイルをダウンロードして照合してから、mainの更新情報を切り替えます。変更がない場合はビルドも公開も行いません。
+
+本家のAPI変更などで自動取り込みやビルドが失敗した場合、公開を止めて、このリポジトリに対応が必要なIssueを作成します。同じ本家コミット・同じmainでの再試行と重複通知は抑制します。修正をmainへpushするか、Actionsの「Run workflow」で `force=true` を指定すると再試行できます。`force=true` は取り込み済みの安定版から新バージョンを再ビルド・正式公開する場合にも使用します。
+
+通常のタグリリースと自動更新は同時実行せず、同じテスト・ビルド処理を使用します。ワークフロー標準の `GITHUB_TOKEN` によるタグpushから別のワークフローを起動することには依存せず、自動更新ジョブ自身が検証・公開まで完了します。
+
+## 本家更新の手動取り込み・保守
 
 取り込み済みの正式版とコミットは [.letasu/upstream.json](.letasu/upstream.json) に記録します。未リリースのmainやプレリリースは自動追従の対象外です。
 
@@ -281,7 +291,7 @@
 
 `patches-bundle.json` の `created_at` はUTCのLocalDateTimeです。`Z` や `+09:00` を付けるとManagerがデコードできません。未署名の `signature_download_url` は `null` にします。
 
-Crowdinの同期や旧セマンティックリリースの定期ワークフローは復元しません。配布には `build_release.yml` を使用します。継続チェックはこのチャットのCodex定期タスクで管理します。
+Crowdinの同期や旧セマンティックリリースの定期ワークフローは復元しません。手動タグ配布には `build_release.yml`、本家への自動追従には `sync_upstream.yml` を使用します。Codex側の定期タスクは停止済みです。
 
 ## ライセンス
 

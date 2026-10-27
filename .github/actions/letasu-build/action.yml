@@ -1,0 +1,31 @@
+name: Build and validate Letasu bundle
+description: Run regression tests, build all patches, and stage the installable release files.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: '21'
+    - uses: gradle/actions/setup-gradle@v5
+    - name: Validate metadata and upstream import tests
+      shell: bash
+      run: |
+        python3 -B scripts/letasu/metadata.py
+        python3 -B -m unittest discover -s tests/release -v
+    - name: Test Smart Audio Focus
+      shell: bash
+      run: python3 -B tests/audiofocus/run_tests.py --java-home "$JAVA_HOME"
+    - name: Build bundle and generate patch list
+      shell: bash
+      run: ./gradlew :patches:buildAndroid :patches:generatePatchesList --no-daemon
+    - name: Validate and stage installable release files
+      shell: bash
+      run: |
+        python3 -B scripts/letasu/metadata.py
+        python3 -B scripts/letasu/package_release.py
+    - uses: actions/upload-artifact@v6
+      with:
+        name: morphe-custom-patches
+        path: build/distribution/*
+        if-no-files-found: error

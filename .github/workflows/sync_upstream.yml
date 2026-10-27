@@ -1,0 +1,48 @@
+name: Sync upstream stable patches
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild and release the current stable upstream even when already imported
+        type: boolean
+        default: false
+
+concurrency:
+  group: letasu-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    if: github.repository == 'letasu/morphe-custom-patches' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
+      FORCE_REBUILD: ${{ inputs.force || false }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - name: Check latest stable upstream
+        id: check
+        run: python3 -B scripts/letasu/github_sync.py check
+      - name: Import upstream and prepare a new version
+        if: steps.check.outputs.changed == 'true'
+        run: python3 -B scripts/letasu/github_sync.py prepare
+      - name: Build and validate candidate
+        if: steps.check.outputs.changed == 'true'
+        uses: ./.github/actions/letasu-build
+      - name: Publish verified release and advance main
+        if: steps.check.outputs.changed == 'true'
+        run: python3 -B scripts/letasu/github_sync.py publish
+      - name: Report actionable failure once
+        if: failure()
+        run: python3 -B scripts/letasu/github_sync.py report
