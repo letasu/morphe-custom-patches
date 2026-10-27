@@ -24,8 +24,9 @@ import app.morphe.extension.music.settings.Settings;
 import app.morphe.extension.music.shared.VideoInformation;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
+import app.morphe.extension.shared.patches.DownloadMode;
+import app.morphe.extension.shared.patches.components.ContextInterface;
 import app.morphe.extension.shared.settings.BaseActivityHook;
-import app.morphe.extension.shared.settings.SharedYouTubeSettings;
 import app.morphe.extension.shared.settings.preference.ExternalDownloaderPreference;
 
 @SuppressWarnings("unused")
@@ -57,36 +58,58 @@ public final class DownloadsPatch {
      * Injection point.
      * Usually is called of the main thread.
      */
-    public static void onLithoTextLoaded(Object conversionContext, CharSequence original) {
+    public static void onLithoTextLoaded(ContextInterface conversionContext, CharSequence original) {
         try {
-            if (SharedYouTubeSettings.EXTERNAL_DOWNLOADER_ACTION_BUTTON.get() &&
-                    downloadButtonLabel.isEmpty() &&
-                    conversionContext.toString().contains("music_download_button.")) {
+            if (isFlyoutMenuOverridden()
+                    && downloadButtonLabel.isEmpty()
+                    && Utils.contains(conversionContext.patch_getPathBuilder(),
+                    "music_download_button.")) {
                 downloadButtonLabel = original.toString();
                 Logger.printDebug(() -> "Found download button label: " + downloadButtonLabel);
             }
         } catch (Exception ex) {
-            Logger.printDebug(() -> "Could not parse litho text", ex);
+            Logger.printDebug(() -> "onLithoTextLoaded failure", ex);
         }
     }
 
     /**
-     * In app downloads reuse the download button hooks, so the override switch gates both targets.
+     * In app downloads and the external downloader always replace the Download button.
      */
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    private static boolean isActionButtonOverridden() {
+        return Settings.DOWNLOAD_MODE.get() != DownloadMode.DEFAULT;
+    }
+
+    /**
+     * The download mode replaces the Download menu, and the external downloader
+     * can replace it in the other modes too.
+     */
+    private static boolean isFlyoutMenuOverridden() {
+        return Settings.DOWNLOAD_MODE.get() != DownloadMode.DEFAULT
+                || Settings.EXTERNAL_DOWNLOADER_MENU.get();
+    }
+
     private static boolean inAppDownloads() {
-        return SharedYouTubeSettings.EXTERNAL_DOWNLOADER_ACTION_BUTTON.get()
-                && Settings.IN_APP_DOWNLOADS.get();
+        return Settings.DOWNLOAD_MODE.get() == DownloadMode.IN_APP;
     }
 
-    private static void startDownload() {
-        startDownload(VideoInformation.getVideoId());
+    private static boolean flyoutMenuUsesExternalDownloader() {
+        return Settings.DOWNLOAD_MODE.get() == DownloadMode.EXTERNAL
+                || Settings.EXTERNAL_DOWNLOADER_MENU.get();
     }
 
-    private static void startDownload(String videoId) {
+    /**
+     * Downloads the track that is playing.
+     */
+    private static void startDownload(boolean externalDownloader) {
+        startDownload(VideoInformation.getVideoId(), externalDownloader);
+    }
+
+    private static void startDownload(String videoId, boolean externalDownloader) {
         cachedFlyoutVideoId = "";
         // Do not clear download button label.
 
-        if (Settings.IN_APP_DOWNLOADS.get()) {
+        if (!externalDownloader) {
             LocalDownloadManager.enqueue(videoId);
             return;
         }
@@ -215,7 +238,7 @@ public final class DownloadsPatch {
     public static boolean offlineVideoEndpointOnClick(ProtocolBufferFieldInterface endpoint,
                                                        @Nullable Map<Object, Object> map) {
         try {
-            if (!SharedYouTubeSettings.EXTERNAL_DOWNLOADER_ACTION_BUTTON.get()) {
+            if (!isActionButtonOverridden()) {
                 return false;
             }
             Utils.verifyOnMainThread();
@@ -229,7 +252,7 @@ public final class DownloadsPatch {
             long now = System.currentTimeMillis();
             if (now - lastMainPlayerDownloadTime < IGNORE_DOUBLE_CLICK_DURATION_MS) return true;
             lastMainPlayerDownloadTime = now;
-            startDownload(videoId);
+            startDownload(videoId, !inAppDownloads());
             return true;
         } catch (Exception ex) {
             Logger.printException(() -> "offlineVideoEndpointOnClick failure", ex);
@@ -255,7 +278,7 @@ public final class DownloadsPatch {
 
     public static boolean inAppDownloadButtonOnClick(@Nullable Map<Object, Object> map) {
         try {
-            if (!SharedYouTubeSettings.EXTERNAL_DOWNLOADER_ACTION_BUTTON.get()
+            if (!isActionButtonOverridden()
                     || downloadButtonLabel.isEmpty() || map == null) {
                 return false;
             }
@@ -268,7 +291,7 @@ public final class DownloadsPatch {
                 }
                 lastMainPlayerDownloadTime = now;
 
-                startDownload();
+                startDownload(!inAppDownloads());
                 return true;
             }
         } catch (Exception ex) {
@@ -282,7 +305,7 @@ public final class DownloadsPatch {
      */
     public static boolean commandResolverOnClick(ProtocolBufferFieldInterface p1, Map<Object, Object> map) {
         try {
-            if (!SharedYouTubeSettings.EXTERNAL_DOWNLOADER_ACTION_BUTTON.get()
+            if (!isFlyoutMenuOverridden()
                     || p1 == null || map == null) {
                 return false;
             }
@@ -303,10 +326,6 @@ public final class DownloadsPatch {
                 Logger.printDebug(() -> "inAppDownloadButtonOnClicked");
                 cachedFlyoutVideoId = "";
                 return true;
-            }
-
-            if (!SharedYouTubeSettings.EXTERNAL_DOWNLOADER_FLYOUT_MENU.get()) {
-                return false;
             }
 
             String p1String = p1.toString();
@@ -355,6 +374,11 @@ public final class DownloadsPatch {
                 }
 
                 final boolean inDialog = isViewInsideDialog(viewObj);
+                if (!inDialog && !isActionButtonOverridden() && isDownloadSender(map)) {
+                    // The Download button of the player, which only the download mode replaces.
+                    return false;
+                }
+
                 String targetId = extractVideoIdFromCommand(p1);
 
                 if (targetId == null && inDialog) {
@@ -367,7 +391,7 @@ public final class DownloadsPatch {
                     final String flyoutId = targetId;
                     Logger.printDebug(() -> "Flyout download of " + flyoutId
                             + " inDialog=" + inDialog);
-                    startDownload(targetId);
+                    startDownload(targetId, flyoutMenuUsesExternalDownloader());
                     return true;
 
                 } else if (inDialog) {
@@ -375,7 +399,7 @@ public final class DownloadsPatch {
                     // The flyout of a queue row carries no id either, so this can only be
                     // the track that is playing.
                     Logger.printDebug(() -> "Now Playing Download Intercepted via Window Check.");
-                    startDownload();
+                    startDownload(flyoutMenuUsesExternalDownloader());
                     return true;
 
                 } else {

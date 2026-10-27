@@ -15,11 +15,14 @@ import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.literal
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.opcode
-import app.morphe.patcher.string
 import app.morphe.patcher.resource.ResourceType
 import app.morphe.patcher.resourceLiteral
+import app.morphe.patcher.string
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
+
+internal const val WATCH_WHILE_LAYOUT_CLASS =
+    "Lcom/google/android/apps/youtube/music/watchpage/ui/WatchWhileLayout;"
 
 /**
  * Matches the miniplayer constructor.
@@ -102,7 +105,7 @@ internal object MinimizedPlayerFingerprint : Fingerprint(
  *   >= 9.x: WatchWhileLayout
  */
 internal object MppWatchWhileLayoutFingerprint : Fingerprint(
-    definingClass = "WatchWhileLayout;",
+    definingClass = WATCH_WHILE_LAYOUT_CLASS,
     returnType = "V",
     parameters = listOf(),
     filters = listOf(
@@ -212,7 +215,6 @@ internal object PlayerPageBehaviorFingerprint : Fingerprint(
  */
 internal object WatchWhileLayoutFingerprint : Fingerprint(
     definingClass = "WatchWhileLayout;",
-    name = "onFinishInflate",
     returnType = "V",
     filters = listOf(
         // <= 8.x: MppPlayerPageBehavior

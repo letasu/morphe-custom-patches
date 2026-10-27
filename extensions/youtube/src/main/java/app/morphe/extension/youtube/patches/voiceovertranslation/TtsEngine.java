@@ -1,6 +1,6 @@
 /*
  * Copyright 2026 Morphe.
- * https://github.com/MorpheApp/morphe-patches
+ * https://github.com/MorpheApp/morphe-patches/pull/1685
  *
  * See the included NOTICE file for GPLv3 Section 7 terms that apply to this code.
  */
@@ -23,7 +23,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -53,16 +52,15 @@ import app.morphe.extension.youtube.patches.VideoInformation;
  *
  * <p>State management is performed on the main thread to avoid complex synchronization.
  */
-final class TtsEngine {
+final class TTSEngine {
 
-    public static final TtsEngine INSTANCE = new TtsEngine();
+    public static final TTSEngine INSTANCE = new TTSEngine();
 
-    private static final String WS_HOST            = "speech.platform.bing.com";
+    private static final String WS_HOST            = EdgeTtsConfig.HOST;
     private static final int    WS_PORT            = 443;
-    private static final String TOKEN              = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+    private static final String TOKEN              = EdgeTtsConfig.TRUSTED_CLIENT_TOKEN;
     private static final String AUDIO_FORMAT       = "audio-24khz-48kbitrate-mono-mp3";
-    // Keep in sync with the Edge browser version used in the User-Agent below.
-    private static final String SEC_MS_GEC_VERSION = "1-143.0.3650.75";
+    private static final String SEC_MS_GEC_VERSION = EdgeTtsConfig.SEC_MS_GEC_VERSION;
 
     private static final int CONNECT_TIMEOUT_MS = 10_000;
     private static final int READ_TIMEOUT_MS    = 20_000;
@@ -104,7 +102,7 @@ final class TtsEngine {
     @GuardedBy("synthesisLock")
     private boolean configSent;
 
-    private TtsEngine() {}
+    private TTSEngine() {}
 
     boolean isSpeaking() {
         Utils.verifyOnMainThread();
@@ -121,7 +119,9 @@ final class TtsEngine {
 
         Utils.runOnBackgroundThread(() -> {
             try {
-                byte[] data = prefetch(text, voiceId, lang);
+                byte[] cached = TTSCache.getPreview(voiceId, lang, text);
+                byte[] data = cached != null ? cached : prefetch(text, voiceId, lang);
+                if (cached == null && data.length > 0) TTSCache.putPreview(voiceId, lang, text, data);
                 Utils.runOnMainThread(() -> {
                     if (data.length > 0 && !stopped && id == playbackId) {
                         play(data, volume, VideoInformation.getPlaybackSpeed(), 0, id, onDone);
@@ -395,7 +395,7 @@ final class TtsEngine {
             TranscriptSegment s = segments.get(i);
             long duration = s.durationMs;
             if (duration <= 0) {
-                duration = TtsCache.getDuration(videoId, i, voice, lang, s.text);
+                duration = TTSCache.getDuration(videoId, i, voice, lang, s.text);
                 if (duration > 0) s.durationMs = duration;
             }
             if (duration <= 0) {
@@ -447,7 +447,7 @@ final class TtsEngine {
             TranscriptSegment s = segments.get(i);
             long spoken = s.durationMs;
             if (spoken <= 0) {
-                spoken = TtsCache.getDuration(videoId, i, voice, lang, s.text);
+                spoken = TTSCache.getDuration(videoId, i, voice, lang, s.text);
                 if (spoken > 0) s.durationMs = spoken;
             }
             if (spoken <= 0) spoken = s.text.length() * ESTIMATED_MS_PER_CHAR;
@@ -505,6 +505,7 @@ final class TtsEngine {
                     // Collect audio frames until the server signals turn.end.
                     ByteArrayOutputStream audioOut = new ByteArrayOutputStream();
                     collectAudio(persistentIn, audioOut);
+                    if (audioOut.size() == 0) throw new IOException("Edge TTS returned no audio");
 
                     lastSynthesisEndMs = System.currentTimeMillis();
                     return audioOut.toByteArray();
@@ -538,11 +539,10 @@ final class TtsEngine {
             closeSocket();
         }
 
-        String secMsGec     = genSecMsGec();
-        String connectionId = uuidHex();
+        String secMsGec = EdgeTtsV2Token.generate(System.currentTimeMillis(), TOKEN);
         String path = "/consumer/speech/synthesize/readaloud/edge/v1"
                 + "?TrustedClientToken=" + TOKEN
-                + "&ConnectionId=" + connectionId
+                + "&ConnectionId=" + uuidHex()
                 + "&Sec-MS-GEC=" + secMsGec
                 + "&Sec-MS-GEC-Version=" + SEC_MS_GEC_VERSION;
 
@@ -592,8 +592,7 @@ final class TtsEngine {
                 + "Sec-WebSocket-Version: 13\r\n"
                 + "Origin: chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold\r\n"
                 + "Accept-Language: en-US,en;q=0.9\r\n"
-                + "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                + " (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0\r\n"
+                + "User-Agent: " + EdgeTtsConfig.USER_AGENT + "\r\n"
                 + "Cookie: muid=" + muid + "\r\n"
                 + "\r\n";
         OutputStream out = socket.getOutputStream();
@@ -605,8 +604,9 @@ final class TtsEngine {
         StringBuilder sb = new StringBuilder(1024);
         for (int b; (b = in.read()) != -1; ) {
             sb.append((char) b);
+            if (sb.length() > 16_384) throw new IOException("WebSocket upgrade headers too large");
             if (sb.length() >= 4 && "\r\n\r\n".contentEquals(sb.subSequence(sb.length() - 4, sb.length()))) {
-                if (!sb.toString().contains("101")) {
+                if (!sb.toString().startsWith("HTTP/1.1 101 ")) {
                     throw new IOException("WebSocket upgrade failed: " + sb.substring(0, Math.min(sb.length(), 120)));
                 }
                 return;
@@ -665,16 +665,17 @@ final class TtsEngine {
                 readFully(in, maskBytes);
             }
 
+            if (payloadLen > 8L * 1024 * 1024) throw new IOException("WebSocket frame too large");
             byte[] payload = new byte[(int) payloadLen];
             readFully(in, payload);
             if (masked) {
                 for (int i = 0; i < payload.length; i++) payload[i] ^= maskBytes[i % 4];
             }
 
-            if (opcode == 0x8) break; // close frame
+            if (opcode == 0x8) throw new IOException("Edge TTS closed before turn.end");
 
             if (opcode == 0x1) { // text frame
-                if (new String(payload, StandardCharsets.UTF_8).contains("Path:turn.end")) break;
+                if (new String(payload, StandardCharsets.UTF_8).contains("Path:turn.end")) return;
             } else if (opcode == 0x2 && payload.length > 2) { // binary audio frame
                 // First 2 bytes encode the header length; audio data starts after the header.
                 int headerLen  = ((payload[0] & 0xFF) << 8) | (payload[1] & 0xFF);
@@ -685,6 +686,7 @@ final class TtsEngine {
             }
             // opcode 0x0 (continuation), 0x9 (ping), 0xA (pong) - ignored
         }
+        throw new IOException("Edge TTS socket ended before turn.end");
     }
 
     private void readFully(InputStream in, byte[] buf) throws IOException {
@@ -793,29 +795,6 @@ final class TtsEngine {
                 currentPlayer = null;
             }
         });
-    }
-
-    /**
-     * Generates the Sec-MS-GEC DRM token required by the Edge TTS WebSocket endpoint.
-     * Algorithm: current time → Windows FILETIME ticks, rounded to 5 minutes,
-     * concatenated with the trusted client token, SHA-256 hashed.
-     */
-    private static String genSecMsGec() throws Exception {
-        // Windows FILETIME epoch offset: 100-nanosecond ticks from 1601-01-01 to 1970-01-01.
-        final long EPOCH_OFFSET_TICKS = 116_444_736_000_000_000L;
-        // 5 minutes expressed in 100-nanosecond ticks.
-        final long FIVE_MIN_TICKS     = 3_000_000_000L;
-
-        final long ticks   = System.currentTimeMillis() * 10_000L + EPOCH_OFFSET_TICKS;
-        final long rounded = ticks - (ticks % FIVE_MIN_TICKS);
-
-        String input = (rounded + TOKEN).toUpperCase(Locale.US);
-        MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
-        byte[] hash = sha256.digest(input.getBytes(StandardCharsets.UTF_8));
-
-        StringBuilder sb = new StringBuilder(64);
-        for (byte b : hash) sb.append(String.format("%02X", b));
-        return sb.toString();
     }
 
     /** Extract locale portion from a voice name, e.g. "uk-UA-OstapNeural" → "uk-UA". */

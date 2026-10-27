@@ -83,6 +83,22 @@ public class CustomBrandingPatch {
                 default ->"morphe_notification_icon_" + name().toLowerCase(Locale.US);
             };
         }
+
+        /**
+         * Returns the raw resource name of the startup animation for this theme.
+         * <p>
+         * Themes that share a launcher foreground share an animation. Returns {@code null} for
+         * {@link #ORIGINAL} and {@link #CUSTOM}, which keep the original animation.
+         *
+         */
+        @Nullable
+        String startupAnimationResourceName() {
+            return switch (this) {
+                case LIGHT, DARK, BLACK -> "morphe_startup_animation";
+                case PLAY, PLAY_BLACK -> "morphe_startup_animation_play";
+                default -> null;
+            };
+        }
     }
 
     /**
@@ -125,16 +141,25 @@ public class CustomBrandingPatch {
         // Cannot use static initialization block otherwise cyclic references exist
         // between Settings initialization and this class.
         if (notificationSmallIcon == null) {
+            final String iconName;
             if (GmsCoreSupportPatch.isPackageNameOriginal()) {
-                // A mounted install has the original icon resource replaced while patching.
-                Logger.printDebug(() -> "App is root mounted. Not overriding small notification icon");
-                return notificationSmallIcon = 0;
+                if (!mountedNotificationIconApplied()) {
+                    Logger.printDebug(() -> "App is root mounted. Not overriding small notification icon");
+                    return notificationSmallIcon = 0;
+                }
+
+                // Patching replaced the original notification icon, but playback and other
+                // notifications use other icons. A resource added by patching is missing if the
+                // status bar loads the stock APK, and an icon it can't load crashes the app,
+                // so all notifications use the replaced original.
+                iconName = originalNotificationIconName();
+            } else {
+                // Resolve the effective BrandingTheme for the notification icon.
+                NotificationIconTheme notificationTheme = SharedYouTubeSettings.CUSTOM_BRANDING_NOTIFICATION_ICON.get();
+                BrandingTheme branding = notificationTheme.resolveNotificationBrandingTheme();
+                iconName = branding.notificationIconResourceName();
             }
 
-            // Resolve the effective BrandingTheme for the notification icon.
-            NotificationIconTheme notificationTheme = SharedYouTubeSettings.CUSTOM_BRANDING_NOTIFICATION_ICON.get();
-            BrandingTheme branding = notificationTheme.resolveNotificationBrandingTheme();
-            String iconName = branding.notificationIconResourceName();
             if (iconName == null) {
                 notificationSmallIcon = 0;
             } else {
@@ -151,6 +176,15 @@ public class CustomBrandingPatch {
      * Injection point.
      */
     public static View getLottieViewOrNull(View lottieStartupView) {
+        if (SplashAnimationPatch.isDisabled()) {
+            return null;
+        }
+
+        if (getStartupAnimation() != 0) {
+            // The icon has its own animation, which replaces the original one.
+            return lottieStartupView;
+        }
+
         if (GmsCoreSupportPatch.isPackageNameOriginal()) {
             // A mounted install cannot change the icon at runtime, so the icon chosen
             // while patching decides if the original startup animation is kept.
@@ -162,6 +196,34 @@ public class CustomBrandingPatch {
         }
 
         return null;
+    }
+
+    /**
+     * The startup animation that matches the launcher icon.
+     *
+     * @return The raw resource id, or 0 to keep the original animation.
+     */
+    public static int getStartupAnimation() {
+        try {
+            BrandingTheme branding;
+            if (GmsCoreSupportPatch.isPackageNameOriginal()) {
+                // A mounted install cannot change the icon at runtime.
+                branding = mountedIconApplied()
+                        ? getDefaultIconStyle()
+                        : BrandingTheme.ORIGINAL;
+            } else {
+                branding = SharedYouTubeSettings.CUSTOM_BRANDING_ICON.get();
+            }
+
+            String animationName = branding.startupAnimationResourceName();
+            if (animationName != null) {
+                // Not found if custom branding is excluded.
+                return ResourceUtils.getIdentifier(ResourceType.RAW, animationName);
+            }
+        } catch (Exception ex) {
+            Logger.printException(() -> "getStartupAnimation failure", ex);
+        }
+        return 0;
     }
 
     /**

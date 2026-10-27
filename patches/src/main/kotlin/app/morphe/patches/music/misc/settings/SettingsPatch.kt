@@ -7,10 +7,12 @@
 
 package app.morphe.patches.music.misc.settings
 
+import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patches.all.misc.clone.setOrGetFallbackPackageName
+import app.morphe.patches.all.misc.crashlog.crashLogPatch
 import app.morphe.patches.all.misc.fix.openurllinks.removeLinkVerification
 import app.morphe.patches.all.misc.resources.addAppResources
 import app.morphe.patches.all.misc.resources.addResourcesPatch
@@ -21,6 +23,7 @@ import app.morphe.patches.music.misc.extension.sharedExtensionPatch
 import app.morphe.patches.music.misc.gms.Constants.MUSIC_PACKAGE_NAME
 import app.morphe.patches.music.misc.playservice.versionCheckPatch
 import app.morphe.patches.music.shared.Constants.COMPATIBILITY_YOUTUBE_MUSIC
+import app.morphe.patches.music.shared.MusicActivityOnCreateFingerprint
 import app.morphe.patches.shared.BoldIconsFeatureFlagFingerprint
 import app.morphe.patches.shared.GoogleApiActivityOnCreateFingerprint
 import app.morphe.patches.shared.misc.checks.experimentalAppNoticePatch
@@ -138,6 +141,9 @@ val settingsPatch = bytecodePatch(
         addResourcesPatch,
         versionCheckPatch,
         removeLinkVerification,
+        crashLogPatch(
+            mainActivityFingerprint = MusicActivityOnCreateFingerprint
+        ),
         experimentalAppNoticePatch(
             mainActivityFingerprint = youTubeMusicApplicationInitOnCreateHook.fingerprint,
             recommendedAppVersion = COMPATIBILITY_YOUTUBE_MUSIC.targets.first { !it.isExperimental }.version!!
@@ -180,6 +186,12 @@ val settingsPatch = bytecodePatch(
             ListPreference(
                 key = "morphe_language",
                 tag = "app.morphe.extension.shared.settings.preference.SortedListPreference"
+            ),
+            NonInteractivePreference(
+                key = "morphe_music_app_language",
+                summaryKey = null,
+                tag = "app.morphe.extension.music.settings.preference.AppLanguagePreference",
+                selectable = true
             )
         )
 
@@ -216,6 +228,12 @@ val settingsPatch = bytecodePatch(
             GoogleApiActivityOnCreateFingerprint,
             MUSIC_ACTIVITY_HOOK_CLASS,
             true
+        )
+
+        // The context is set before this, since the extension hooks are added in finalize.
+        youTubeMusicApplicationInitOnCreateHook.fingerprint.method.addInstruction(
+            0,
+            "invoke-static {}, $MUSIC_ACTIVITY_HOOK_CLASS->onMainActivityCreate()V"
         )
 
         BoldIconsFeatureFlagFingerprint.matchAll().forEach {

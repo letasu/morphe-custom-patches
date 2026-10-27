@@ -1,10 +1,5 @@
 package app.morphe.extension.youtube.patches.components;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.Locale;
 
 import app.morphe.extension.shared.ByteTrieSearch;
@@ -23,66 +18,6 @@ public final class MembersVideoFilter extends Filter {
 
     public static final BooleanSetting HIDE_MEMBERS_VIDEOS =
             new BooleanSetting("morphe_hide_members_videos", false, true);
-
-    private static volatile boolean isRegistered = false;
-
-    /**
-     * Appends MembersVideoFilter to an existing Filter array.
-     * Injected by bytecode patch into LithoFilterPatch's filter array provider.
-     */
-    @NonNull
-    public static Filter[] appendToFilters(@Nullable Filter[] original) {
-        if (original == null || original.length == 0) {
-            return new Filter[] { new MembersVideoFilter() };
-        }
-        for (Filter f : original) {
-            if (f instanceof MembersVideoFilter) {
-                return original;
-            }
-        }
-        Filter[] newFilters = new Filter[original.length + 1];
-        System.arraycopy(original, 0, newFilters, 0, original.length);
-        newFilters[original.length] = new MembersVideoFilter();
-        return newFilters;
-    }
-
-    static {
-        try {
-            initialize();
-        } catch (Throwable ignored) {}
-    }
-
-    public static synchronized void initialize() {
-        if (isRegistered) return;
-        isRegistered = true;
-        try {
-            Class<?> lithoPatchClass = Class.forName("app.morphe.extension.shared.patches.components.LithoFilterPatch");
-            Method filterUsingCallbacksMethod = null;
-            for (Method m : lithoPatchClass.getDeclaredMethods()) {
-                if (m.getName().equals("filterUsingCallbacks")) {
-                    filterUsingCallbacksMethod = m;
-                    m.setAccessible(true);
-                    break;
-                }
-            }
-            Field idTreeField = lithoPatchClass.getDeclaredField("identifierSearchTree");
-            idTreeField.setAccessible(true);
-            Object idTree = idTreeField.get(null);
-
-            Field pathTreeField = lithoPatchClass.getDeclaredField("pathSearchTree");
-            pathTreeField.setAccessible(true);
-            Object pathTree = pathTreeField.get(null);
-
-            if (filterUsingCallbacksMethod != null && pathTree != null && idTree != null) {
-                MembersVideoFilter filter = new MembersVideoFilter();
-                filterUsingCallbacksMethod.invoke(null, idTree, filter, filter.identifierCallbacks, Filter.FilterContentType.IDENTIFIER);
-                filterUsingCallbacksMethod.invoke(null, pathTree, filter, filter.pathCallbacks, Filter.FilterContentType.PATH);
-                Logger.printDebug(() -> "MembersVideoFilter: registered via reflection into LithoFilterPatch");
-            }
-        } catch (Throwable t) {
-            Logger.printDebug(() -> "MembersVideoFilter: Reflection registration skipped: " + t.getMessage());
-        }
-    }
 
     private static final ByteTrieSearch membersBufferSearch = new ByteTrieSearch(
             ByteTrieSearch.convertStringsToBytes(
@@ -155,7 +90,7 @@ public final class MembersVideoFilter extends Filter {
 
     @Override
     public boolean isFiltered(ContextInterface contextInterface, String identifier, String accessibility,
-                              String path, byte[] buffer, BufferAsciiStrings asciiStrings,
+                              CharSequence path, byte[] buffer, BufferAsciiStrings asciiStrings,
                               StringFilterGroup matchedGroup, FilterContentType contentType, int contentIndex) {
         if (!HIDE_MEMBERS_VIDEOS.get()) {
             return false;

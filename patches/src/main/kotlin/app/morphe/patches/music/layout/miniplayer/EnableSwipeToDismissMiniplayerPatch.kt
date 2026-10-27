@@ -8,6 +8,7 @@
 package app.morphe.patches.music.layout.miniplayer
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
 import app.morphe.patcher.InstructionLocation.MatchAfterWithin
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
@@ -39,7 +40,7 @@ import com.android.tools.smali.dexlib2.immutable.ImmutableMethod
 import com.android.tools.smali.dexlib2.immutable.ImmutableMethodParameter
 
 private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/EnableSwipeToDismissMiniplayerPatch;"
-private const val CROSSFADE_MANAGER_CLASS = "Lapp/morphe/extension/music/patches/CrossfadeManager;"
+private const val CROSSFADE_MANAGER_CLASS = "Lapp/morphe/extension/music/patches/CrossfadePatch;"
 
 @Suppress("unused")
 val enableSwipeToDismissMiniplayerPatch = bytecodePatch(
@@ -141,6 +142,11 @@ val enableSwipeToDismissMiniplayerPatch = bytecodePatch(
             returnType = "V",
             filters = listOf(
                 opcode(Opcode.IF_NE),
+                fieldAccess(
+                    opcode = Opcode.IGET_OBJECT,
+                    type = WATCH_WHILE_LAYOUT_CLASS,
+                    location = MatchAfterImmediately()
+                ),
                 methodCall(
                     opcode = Opcode.INVOKE_VIRTUAL,
                     smali = MiniPlayerDefaultTextFingerprint.method.toString()

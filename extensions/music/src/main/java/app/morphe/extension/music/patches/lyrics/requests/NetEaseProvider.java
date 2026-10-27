@@ -30,11 +30,13 @@ import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import app.morphe.extension.music.patches.lyrics.Lyrics;
-import app.morphe.extension.music.patches.lyrics.LyricsLine;
-import app.morphe.extension.music.patches.lyrics.LyricsMerge;
-import app.morphe.extension.music.patches.lyrics.TrackInfo;
-import app.morphe.extension.music.patches.lyrics.Word;
+import app.morphe.extension.music.patches.lyrics.model.Lyrics;
+import app.morphe.extension.music.patches.lyrics.model.LyricsLine;
+import app.morphe.extension.music.patches.lyrics.model.LyricsMerge;
+import app.morphe.extension.music.patches.lyrics.model.TrackInfo;
+import app.morphe.extension.music.patches.lyrics.model.Word;
+import app.morphe.extension.music.patches.lyrics.parsers.LRCParser;
+import app.morphe.extension.music.patches.lyrics.parsers.LyricsCrypto;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.requests.Requester;
 
@@ -86,17 +88,26 @@ public final class NetEaseProvider implements LyricsProvider {
 
     @Nullable
     @Override
-    public Lyrics fetch(TrackInfo track) throws Exception {
+    public FetchResult fetch(TrackInfo track) throws Exception {
         String keyword = track.title() + " " + track.artist();
         JSONObject song = searchBest(keyword, track);
         if (song == null || !song.has("id")) {
             return null;
         }
-        return fetchFromSong(song);
+        Lyrics lyrics = fetchFromSong(song);
+        if (lyrics == null) {
+            return null;
+        }
+        final long durationMs = song.optLong("duration", 0);
+        return FetchResult.of(lyrics,
+                song.optString("name", ""),
+                song.optString("artist", ""),
+                durationMs > 0 ? durationMs / 1000 : 0,
+                track);
     }
 
     @Override
-    public List<Lyrics> fetchCandidates(TrackInfo track) throws Exception {
+    public List<Lyrics.ScoredLyrics> fetchCandidates(TrackInfo track) throws Exception {
         String keyword = track.title() + " " + track.artist();
         List<JSONObject> songs = searchAll(keyword, track);
 
@@ -122,7 +133,7 @@ public final class NetEaseProvider implements LyricsProvider {
             }
         }
 
-        return Lyrics.sortLyricsByScore(scored);
+        return Lyrics.sortScoredByScore(scored);
     }
 
     @Nullable
@@ -146,13 +157,17 @@ public final class NetEaseProvider implements LyricsProvider {
 
         List<String> creditLines = parseYrcCredits(yrc);
 
-        List<LyricsLine> romaLines = romalrc.isEmpty() ? null : LrcParser.parseSynced(romalrc);
+        List<LyricsLine> romaLines = romalrc.isEmpty() ? null : LRCParser.parseSynced(romalrc);
         List<LyricsLine> romanization = LyricsMerge.mergeRomanization(lines, romaLines);
 
-        List<LyricsLine> transLines = tlyric.isEmpty() ? null : LrcParser.parseSynced(tlyric);
-        List<LyricsLine> translation = LyricsMerge.mergeRomanization(lines, transLines);
-        Map<String, List<LyricsLine>> translations =
-                LyricsMerge.singleLanguageTranslations(translation, "zh");
+        // NetEase writes this translation itself, in the Chinese the mainland uses.
+        Map<String, List<LyricsLine>> translations = null;
+        if (LyricsRequests.isSimplifiedChinese()) {
+            List<LyricsLine> transLines = tlyric.isEmpty() ? null : LRCParser.parseSynced(tlyric);
+            List<LyricsLine> translation = LyricsMerge.mergeRomanization(lines, transLines);
+            translations = LyricsMerge.singleLanguageTranslations(
+                    translation, LyricsRequests.SIMPLIFIED_CHINESE);
+        }
 
         String rawFormat = filterJsonLines(!yrc.isEmpty() ? yrc : lrc);
         String formatType = !yrc.isEmpty() ? "yrc" : "lrc";
@@ -246,7 +261,14 @@ public final class NetEaseProvider implements LyricsProvider {
         }
         List<JSONObject> scored = new ArrayList<>(candidates);
         scored.sort((a, b) -> scoreCandidate(b, track) - scoreCandidate(a, track));
-        return scored;
+        List<JSONObject> passed = new ArrayList<>();
+        for (JSONObject item : scored) {
+            if (scoreCandidate(item, track) >= LyricsRequests.SOFT_MIN) {
+                passed.add(item);
+            }
+        }
+        return passed.isEmpty() && !scored.isEmpty()
+                ? List.of(scored.get(0)) : passed;
     }
 
     @Nullable
@@ -264,6 +286,9 @@ public final class NetEaseProvider implements LyricsProvider {
                 bestScore = score;
                 best = candidate;
             }
+        }
+        if (best == null || bestScore < LyricsRequests.SOFT_MIN) {
+            return null;
         }
         return best;
     }
@@ -580,6 +605,7 @@ public final class NetEaseProvider implements LyricsProvider {
         return parseLrc(lrc);
     }
 
+    @SuppressWarnings("SizeReplaceableByIsEmpty")
     private static List<LyricsLine> parseYrc(String text) {
         List<LyricsLine> lines = new ArrayList<>();
         if (text == null || text.isEmpty()) {
@@ -604,49 +630,44 @@ public final class NetEaseProvider implements LyricsProvider {
 
             List<Long> starts = new ArrayList<>();
             List<Long> durations = new ArrayList<>();
-            List<String> texts = new ArrayList<>();
+            List<int[]> marks = new ArrayList<>();
             Matcher wordMatch = YRC_WORD.matcher(content);
             while (wordMatch.find()) {
                 starts.add(Long.parseLong(Objects.requireNonNull(wordMatch.group(1))));
                 durations.add(Long.parseLong(Objects.requireNonNull(wordMatch.group(2))));
-                texts.add(wordMatch.group(3));
+                marks.add(new int[]{wordMatch.start(), wordMatch.start(3)});
             }
 
             List<Word> words = new ArrayList<>();
             StringBuilder full = new StringBuilder();
+            if (!marks.isEmpty() && marks.get(0)[0] > 0) {
+                full.append(content, 0, marks.get(0)[0]);
+            }
             for (int i = 0; i < starts.size(); i++) {
                 long wordStart = starts.get(i);
                 long wordEnd = wordStart + durations.get(i);
-                String wordText = texts.get(i);
-                if (wordText.isEmpty()) {
+                int segmentStart = marks.get(i)[1];
+                int segmentEnd = i + 1 < marks.size() ? marks.get(i + 1)[0] : content.length();
+                String wordText = content.substring(segmentStart, segmentEnd);
+                full.append(wordText);
+                String trimmed = wordText.trim();
+                if (trimmed.isEmpty()) {
+                    // A timed space between words is kept in the line text only.
                     continue;
                 }
                 boolean endsWithSpace =
                         Character.isWhitespace(wordText.charAt(wordText.length() - 1));
-                String trimmed = wordText.trim();
-                if (trimmed.isEmpty()) {
-                    continue;
-                }
-                //noinspection SizeReplaceableByIsEmpty
-                if (full.length() > 0 && needsSpaceBetween(full.toString(), trimmed)) {
-                    full.append(' ');
-                }
                 words.add(new Word(wordStart, wordEnd, trimmed, null, endsWithSpace));
-                full.append(trimmed);
             }
-            if (words.isEmpty() && !content.isEmpty()) {
-                words.add(new Word(lineStart, lineEnd, content));
+            if (words.isEmpty() && full.length() == 0 && !content.isEmpty()) {
                 full.append(content);
-            }
-            if (words.isEmpty()) {
-                continue;
             }
 
             String fullText = full.toString().trim();
             if (fullText.isEmpty()) {
                 continue;
             }
-            lines.add(new LyricsLine(lineStart, fullText, words));
+            lines.add(new LyricsLine(lineStart, lineEnd, fullText, words));
         }
 
         lines.sort(Comparator.comparingLong(LyricsLine::startTimeMs));
@@ -654,9 +675,8 @@ public final class NetEaseProvider implements LyricsProvider {
     }
 
     private static List<LyricsLine> parseLrc(String text) {
-        List<LyricsLine> lines = new ArrayList<>();
         if (text == null || text.isEmpty()) {
-            return lines;
+            return new ArrayList<>();
         }
 
         List<Item> items = new ArrayList<>();
@@ -665,30 +685,9 @@ public final class NetEaseProvider implements LyricsProvider {
             if (line.isEmpty()) {
                 continue;
             }
-            Matcher timeMatch = LRC_TIME.matcher(line);
-            List<Long> starts = new ArrayList<>();
-            int lastEnd = -1;
-            while (timeMatch.find()) {
-                starts.add(parseTimeMs(timeMatch.group(1), timeMatch.group(2), timeMatch.group(3)));
-                lastEnd = timeMatch.end();
-            }
-            if (starts.isEmpty()) {
-                continue;
-            }
-            String content = line.substring(lastEnd).trim();
-            if (content.isEmpty()) {
-                continue;
-            }
-            for (Long start : starts) {
-                items.add(new Item(start, content));
-            }
+            addTimeTaggedLine(line, items);
         }
-
-        items.sort(Comparator.comparingLong(Item::start));
-        for (Item item : items) {
-            lines.add(new LyricsLine(item.start(), item.text()));
-        }
-        return lines;
+        return toSortedLines(items);
     }
 
     private static List<LyricsLine> parseMixedNeteaseLyrics(String text) {
@@ -731,27 +730,38 @@ public final class NetEaseProvider implements LyricsProvider {
                 continue;
             }
 
-            Matcher timeMatch = LRC_TIME.matcher(line);
-            List<Long> starts = new ArrayList<>();
-            int lastEnd = -1;
-            while (timeMatch.find()) {
-                starts.add(parseTimeMs(timeMatch.group(1), timeMatch.group(2), timeMatch.group(3)));
-                lastEnd = timeMatch.end();
-            }
-            if (starts.isEmpty()) {
-                continue;
-            }
-            String content = line.substring(lastEnd).trim();
-            if (content.isEmpty()) {
-                continue;
-            }
-            for (Long start : starts) {
-                items.add(new Item(start, content));
-            }
+            addTimeTaggedLine(line, items);
         }
+        return toSortedLines(items);
+    }
 
+    /**
+     * Adds one line of {@code [mm:ss.xx] text}, once per timestamp it carries. A line with no
+     * timestamp, or with nothing after the last one, adds nothing.
+     */
+    private static void addTimeTaggedLine(String line, List<Item> items) {
+        Matcher timeMatch = LRC_TIME.matcher(line);
+        List<Long> starts = new ArrayList<>();
+        int lastEnd = -1;
+        while (timeMatch.find()) {
+            starts.add(parseTimeMs(timeMatch.group(1), timeMatch.group(2), timeMatch.group(3)));
+            lastEnd = timeMatch.end();
+        }
+        if (starts.isEmpty()) {
+            return;
+        }
+        String content = line.substring(lastEnd).trim();
+        if (content.isEmpty()) {
+            return;
+        }
+        for (Long start : starts) {
+            items.add(new Item(start, content));
+        }
+    }
+
+    private static List<LyricsLine> toSortedLines(List<Item> items) {
         items.sort(Comparator.comparingLong(Item::start));
-        List<LyricsLine> lines = new ArrayList<>();
+        List<LyricsLine> lines = new ArrayList<>(items.size());
         for (Item item : items) {
             lines.add(new LyricsLine(item.start(), item.text()));
         }
@@ -791,29 +801,5 @@ public final class NetEaseProvider implements LyricsProvider {
 
     private static String generateClientSign() {
         return randomMac() + "@@@" + randomChars(8, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") + "@@@@@@" + randomChars(64, "0123456789abcdef");
-    }
-
-    private static boolean isCjk(char c) {
-        Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
-        return block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
-                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_A
-                || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS_EXTENSION_B
-                || block == Character.UnicodeBlock.CJK_COMPATIBILITY_IDEOGRAPHS
-                || block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION
-                || block == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
-                || block == Character.UnicodeBlock.HIRAGANA
-                || block == Character.UnicodeBlock.KATAKANA
-                || block == Character.UnicodeBlock.HANGUL_JAMO
-                || block == Character.UnicodeBlock.HANGUL_COMPATIBILITY_JAMO
-                || block == Character.UnicodeBlock.HANGUL_SYLLABLES;
-    }
-
-    private static boolean needsSpaceBetween(String a, String b) {
-        if (a.isEmpty() || b.isEmpty()) {
-            return false;
-        }
-        char last = a.charAt(a.length() - 1);
-        char first = b.charAt(0);
-        return !(isCjk(last) || isCjk(first));
     }
 }

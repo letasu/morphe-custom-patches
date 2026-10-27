@@ -14,18 +14,22 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLa
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.patch.bytecodePatch
+import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patches.all.misc.resources.addResourcesPatch
 import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
 import app.morphe.patches.youtube.misc.settings.PreferenceScreen
 import app.morphe.patches.youtube.misc.settings.settingsPatch
+import app.morphe.patches.youtube.misc.toolbar.hookToolBar
+import app.morphe.patches.youtube.misc.toolbar.toolBarHookPatch
 import app.morphe.patches.youtube.shared.Constants.COMPATIBILITY_YOUTUBE
-import app.morphe.patches.youtube.shared.YouTubeActivityOnCreateFingerprint
+import app.morphe.util.ResourceGroup
+import app.morphe.util.copyResources
 import app.morphe.util.findFreeRegister
 import app.morphe.util.getReference
 import app.morphe.util.indexOfFirstInstructionOrThrow
-import app.morphe.util.indexOfFirstInstructionReversedOrThrow
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 
@@ -41,7 +45,16 @@ val channelSearchPatch = bytecodePatch(
 
     dependsOn(
         addResourcesPatch,
-        settingsPatch
+        settingsPatch,
+        toolBarHookPatch,
+        resourcePatch {
+            execute {
+                copyResources(
+                    "channelsearch",
+                    ResourceGroup("drawable", "morphe_channel_search_button.xml")
+                )
+            }
+        }
     )
 
     execute {
@@ -49,23 +62,14 @@ val channelSearchPatch = bytecodePatch(
             SwitchPreference("morphe_channel_search", summary = true)
         )
 
-        // Activity is used as the context of the result dialog.
-        YouTubeActivityOnCreateFingerprint.method.addInstruction(
-            0,
-            "invoke-static/range { p0 .. p0 }, $EXTENSION_CLASS->" +
-                    "setMainActivity(Landroid/app/Activity;)V",
-        )
+        // Add a dedicated channel-search action while keeping YouTube's original icon global.
+        hookToolBar("$EXTENSION_CLASS->setSearchButtonView")
 
         // A channel page browses by its channel id, which is what the search is scoped to.
         BrowseFragmentOnCreateViewFingerprint.let {
             it.method.apply {
-                val browseDataIndex = it.instructionMatches.first().index
-
                 // The endpoint of the page is read just before it is checked for browse data.
-                val endpointIndex = indexOfFirstInstructionReversedOrThrow(
-                    browseDataIndex,
-                    fieldAccess(opcode = Opcode.IGET_OBJECT, definingClass = "this")
-                )
+                val endpointIndex = it.instructionMatches[1].index
                 val endpointField = getInstruction<ReferenceInstruction>(endpointIndex)
                     .getReference<FieldReference>()!!
 
@@ -73,10 +77,10 @@ val channelSearchPatch = bytecodePatch(
                 val browseDataExtensionIndex = indexOfFirstInstructionOrThrow(
                     endpointIndex, Opcode.SGET_OBJECT
                 )
-                val browseDataExtensionField =
-                    getInstruction<ReferenceInstruction>(browseDataExtensionIndex)
+                val browseDataExtensionField = getInstruction<ReferenceInstruction>(browseDataExtensionIndex)
                         .getReference<FieldReference>()!!
 
+                // Matches two 100% identical methods in the same class, either method works here.
                 val browseIdMethod = Fingerprint(
                     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
                     returnType = "Ljava/lang/String;",
@@ -84,7 +88,7 @@ val channelSearchPatch = bytecodePatch(
                     filters = listOf(
                         fieldAccess(opcode = Opcode.SGET_OBJECT, reference = browseDataExtensionField)
                     )
-                ).method
+                ).matchAll(1..2).first().method
 
                 // The fragment is handed the endpoint of every page it shows, including a page that
                 // is returned to and served from cache, which makes no browse request to read.
@@ -119,6 +123,23 @@ val channelSearchPatch = bytecodePatch(
             0,
             "invoke-static { }, $EXTENSION_CLASS->clearBrowseId()V"
         )
+
+        // The search box otherwise still reads as a search of all of YouTube.
+        // Only the default hint is replaced, not the hint of Shorts or playlist search.
+        SearchBoxHintFingerprint.let {
+            it.method.apply {
+                val index = it.instructionMatches.last().index
+                val register = getInstruction<OneRegisterInstruction>(index).registerA
+
+                addInstructions(
+                    index + 1,
+                    """
+                        invoke-static { v$register }, $EXTENSION_CLASS->getSearchHint(Ljava/lang/String;)Ljava/lang/String;
+                        move-result-object v$register
+                    """
+                )
+            }
+        }
 
         SearchSubmitFingerprint.method.addInstructionsWithLabels(
             0,

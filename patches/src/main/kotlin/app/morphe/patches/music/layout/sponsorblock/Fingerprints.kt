@@ -8,13 +8,16 @@
 package app.morphe.patches.music.layout.sponsorblock
 
 import app.morphe.patcher.Fingerprint
+import app.morphe.patcher.InstructionLocation.MatchAfterLast
+import app.morphe.patcher.fieldAccess
+import com.android.tools.smali.dexlib2.Opcode
 
 /**
  * Matches {@code MusicPlaybackControlsTimeBar.draw(Canvas)}.
  * Draws segment markers on the compact/mini player seekbar.
  */
 internal object MusicTimeBarDrawFingerprint : Fingerprint(
-    definingClass = "/MusicPlaybackControlsTimeBar;",
+    definingClass = "Lcom/google/android/apps/youtube/music/watchpage/MusicPlaybackControlsTimeBar;",
     name = "draw",
     returnType = "V"
 )
@@ -24,7 +27,14 @@ internal object MusicTimeBarDrawFingerprint : Fingerprint(
  * Resolves the Rect field used for seekbar bounds.
  */
 internal object MusicTimeBarOnMeasureFingerprint : Fingerprint(
-    definingClass = "/MusicPlaybackControlsTimeBar;",
+    definingClass = "Lcom/google/android/apps/youtube/music/watchpage/MusicPlaybackControlsTimeBar;",
     name = "onMeasure",
-    returnType = "V"
+    returnType = "V",
+    filters = listOf(
+        fieldAccess(
+            opcode = Opcode.IGET_OBJECT,
+            type = "Landroid/graphics/Rect;",
+            location = MatchAfterLast()
+        )
+    )
 )

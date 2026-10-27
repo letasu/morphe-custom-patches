@@ -1,0 +1,14 @@
+{
+  "patches/src/main/resources/addresources/values/youtube/strings.xml": [
+    "<string name=\"morphe_hide_members_videos_title\">Hide \\'Members only\\' videos</string>",
+    "<string name=\"morphe_hide_members_videos_summary\">Hides members-only and members-first videos from feeds and channels</string>",
+    "<string name=\"morphe_smart_audio_focus_title\">Smart audio focus</string>",
+    "<string name=\"morphe_smart_audio_focus_summary\">Pauses external music while playing videos and automatically resumes when leaving the video player</string>"
+  ],
+  "patches/src/main/resources/addresources/values-ja-rJP/youtube/strings.xml": [
+    "<string name=\"morphe_hide_members_videos_title\">「メンバー限定」動画を非表示</string>",
+    "<string name=\"morphe_hide_members_videos_summary\">フィードやチャンネルからメンバー限定およびメンバー先行動画を非表示にします</string>",
+    "<string name=\"morphe_smart_audio_focus_title\">スマートオーディオフォーカス</string>",
+    "<string name=\"morphe_smart_audio_focus_summary\">動画再生中に外部音楽を一時停止し、動画ページを離れた時に自動的に再開します</string>"
+  ]
+}

@@ -12,6 +12,9 @@ package app.morphe.patches.music.layout.buttons
 
 import app.morphe.patcher.Fingerprint
 import app.morphe.patcher.InstructionLocation.MatchAfterImmediately
+import app.morphe.patcher.InstructionLocation.MatchAfterWithin
+import app.morphe.patcher.checkCast
+import app.morphe.patcher.fieldAccess
 import app.morphe.patcher.methodCall
 import app.morphe.patcher.opcode
 import app.morphe.patcher.resource.ResourceType
@@ -43,7 +46,7 @@ internal object HistoryMenuItemFingerprint : Fingerprint(
         opcode(Opcode.RETURN_VOID, MatchAfterImmediately()),
     ),
     custom = { _, classDef ->
-        classDef.methods.count() == 5 || classDef.methods.count() == 4
+        classDef.methods.count() == 4 || classDef.methods.count() == 5
     }
 )
 
@@ -59,7 +62,7 @@ internal object HistoryMenuItemOfflineTabFingerprint : Fingerprint(
 )
 
 internal object SearchActionViewFingerprint : Fingerprint(
-    definingClass = "/SearchActionProvider;",
+    definingClass = "Lcom/google/android/apps/youtube/music/search/SearchActionProvider;",
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
     returnType = "Landroid/view/View;",
     parameters = listOf(),
@@ -68,11 +71,45 @@ internal object SearchActionViewFingerprint : Fingerprint(
     )
 )
 
+/**
+ * Matches the search toolbar view constructor in newer app targets,
+ * and the search fragments that build the toolbar in older app targets.
+ */
+internal object SearchVoiceButtonsFingerprint : Fingerprint(
+    filters = listOf(
+        resourceLiteral(ResourceType.ID, "voice_search"),
+        opcode(Opcode.MOVE_RESULT_OBJECT, location = MatchAfterWithin(3)),
+        resourceLiteral(ResourceType.ID, "sound_search"),
+        opcode(Opcode.MOVE_RESULT_OBJECT, location = MatchAfterWithin(3))
+    )
+)
+
 internal object TopBarMenuItemImageViewFingerprint : Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.FINAL),
     returnType = "Landroid/view/View;",
     parameters = listOf(),
     filters = listOf(
-        resourceLiteral(ResourceType.ID, "top_bar_menu_item_image_view")
+        resourceLiteral(ResourceType.ID, "top_bar_menu_item_image_view"),
+        opcode(Opcode.MOVE_RESULT_OBJECT),
+        fieldAccess(
+            opcode = Opcode.IGET_OBJECT,
+            definingClass = "this",
+            type = "Lj$/util/Optional;"
+        )
+    )
+)
+
+/**
+ * The Library tab binds its floating New button as an extended button. Other fragments bind
+ * a view with the same id as a different class, so the cast tells the Library button apart.
+ */
+internal object LibraryNewButtonFingerprint : Fingerprint(
+    filters = listOf(
+        resourceLiteral(ResourceType.ID, "floating_action_button"),
+        opcode(Opcode.MOVE_RESULT_OBJECT, location = MatchAfterWithin(3)),
+        checkCast(
+            "Lcom/google/android/material/floatingactionbutton/ExtendedFloatingActionButton;",
+            location = MatchAfterImmediately()
+        )
     )
 )

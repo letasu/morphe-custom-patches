@@ -1,8 +1,8 @@
 {
-  "created_at": "2026-10-27T12:05:39",
-  "description": "## [1.0.9] (2026-10-27)\n\n### Fixes\n\n* **Smart audio focus:** release focus when leaving Shorts for a channel page or backgrounding YouTube, and reacquire it when returning to Shorts.\n* Ignore late Shorts playback and focus requests while the player is hidden.\n* Preserve the all-in-one bundle with all stock patches and both custom patches.",
-  "download_url": "https://github.com/letasu/morphe-custom-patches/releases/download/v1.0.9/patches-1.0.9.mpp",
+  "created_at": "2026-10-27T12:26:37",
+  "description": "## Letasu Patches v1.0.10\n\n- Managerが更新情報を読み取れない問題を修正しました。日時をManager互換のUTC形式とし、未署名の署名URLをnullに統一しました。\n- 本家Morphe Patches v1.48.0（f3acc10e2691ffc4db29c6a6a651ee61fb54c047）の正式版ソース・依存関係・互換対象へ更新しました。\n- Smart Audio FocusとHide members videosを維持し、メンバー限定動画フィルターを本家2.0 APIへ対応させました。\n- 更新時のメタデータ検証と回帰テストをリリース処理へ追加しました。\n\nMorphe Managerを最新版へ更新し、Letasu Patchesの更新を実行してください。更新が反映されない場合は、ソースを `https://github.com/letasu/morphe-custom-patches` から追加し直してください。\n\nYouTubeへ適用する際は、Letasu Patchesだけを選択し、再パッチしてインストールしてください。\n\n本家同様、パッチャー2.0対応のManagerが必要です。実機でのYouTube・外部音楽アプリとの連携動作は未確認です。\n",
+  "download_url": "https://github.com/letasu/morphe-custom-patches/releases/download/v1.0.10/patches-1.0.10.mpp",
   "signature_download_url": null,
-  "page_url": "https://github.com/letasu/morphe-custom-patches/releases/tag/v1.0.9",
-  "version": "1.0.9"
+  "page_url": "https://github.com/letasu/morphe-custom-patches/releases/tag/v1.0.10",
+  "version": "1.0.10"
 }

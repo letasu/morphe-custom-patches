@@ -9,20 +9,22 @@ package app.morphe.extension.music.settings.preference;
 
 import static app.morphe.extension.shared.StringRef.str;
 
+import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.drawable.ShapeDrawable;
-import android.graphics.drawable.shapes.RoundRectShape;
 import android.net.Uri;
 import android.preference.Preference;
 import android.text.InputType;
 import android.util.Pair;
 import android.util.TypedValue;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import androidx.annotation.Nullable;
 
 import app.morphe.extension.music.patches.lyrics.requests.AppleMusicProvider;
 import app.morphe.extension.music.patches.lyrics.requests.CaptionsFetcher;
@@ -80,6 +82,9 @@ public class LyricsTokenDialogPreference extends Preference {
         setSelectable(true);
         setPersistent(false);
     }
+
+    @Nullable
+    private static Dialog activeDialog;
 
     private void saveToken(String token) {
         setting.save(token);
@@ -167,7 +172,7 @@ public class LyricsTokenDialogPreference extends Preference {
                 "https://www.musixmatch.com",
                 false,
                 MusixmatchProvider::validateToken,
-                null);
+                "morphe_music_musixmatch_token_optional_hint");
         preference.onTokenChanged = MusixmatchProvider::invalidateToken;
         return preference;
     }
@@ -177,9 +182,21 @@ public class LyricsTokenDialogPreference extends Preference {
         showDialog(null);
     }
 
-    public void showDialog(Runnable onDismissed) {
+    public void showDialog(@Nullable Runnable onDismissed) {
         Context context = getContext();
-        final boolean configured = !setting.get().isBlank();
+        if (context instanceof Activity activity
+                && (activity.isFinishing() || activity.isDestroyed())) {
+            if (onDismissed != null) {
+                onDismissed.run();
+            }
+            return;
+        }
+        if (activeDialog != null && activeDialog.isShowing()) {
+            return;
+        }
+
+        final String storedToken = setting.get();
+        final boolean configured = storedToken != null && !storedToken.isBlank();
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -194,17 +211,20 @@ public class LyricsTokenDialogPreference extends Preference {
         instructionParams.bottomMargin = Dim.dp12;
         content.addView(instruction, instructionParams);
 
-        EditText tokenInput = createThemedEditText(context);
+        EditText tokenInput = ThemedInput.create(context);
         tokenInput.setHint(str(hintRes));
         tokenInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         if (multiline) {
             tokenInput.setSingleLine(false);
             tokenInput.setMinLines(3);
+            // A full cookie string is long. Scroll inside the field
+            // so the dialog buttons are not pushed off the screen.
+            tokenInput.setMaxLines(6);
+            tokenInput.setVerticalScrollBarEnabled(true);
         }
         if (configured) {
-            String currentToken = setting.get();
-            tokenInput.setText(currentToken);
-            tokenInput.setSelection(currentToken.length());
+            tokenInput.setText(storedToken);
+            tokenInput.setSelection(storedToken.length());
         }
         content.addView(tokenInput, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -221,15 +241,6 @@ public class LyricsTokenDialogPreference extends Preference {
             belowHintParams.topMargin = Dim.dp8;
             content.addView(belowHint, belowHintParams);
         }
-
-        TextView status = new TextView(context);
-        status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        status.setTextColor(ThemeUtils.getAppForegroundColor());
-        status.setVisibility(android.view.View.GONE);
-        LinearLayout.LayoutParams statusParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        statusParams.topMargin = Dim.dp12;
 
         Pair<Dialog, LinearLayout> dialogPair = CustomDialog.create(
                 context,
@@ -297,27 +308,21 @@ public class LyricsTokenDialogPreference extends Preference {
             content.addView(getTokenBtn, getTokenParams);
         }
 
-        content.addView(status, statusParams);
-
         mainLayout.addView(content, mainLayout.getChildCount() - 1,
                 new LinearLayout.LayoutParams(
                         LinearLayout.LayoutParams.MATCH_PARENT,
                         LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        dialog.show();
-    }
-
-    private static EditText createThemedEditText(Context context) {
-        EditText editText = new EditText(context);
-        editText.setSingleLine(true);
-        editText.setTextSize(16);
-        editText.setTextColor(ThemeUtils.getAppForegroundColor());
-        ShapeDrawable background = new ShapeDrawable(new RoundRectShape(
-                Dim.roundedCorners(10), null, null));
-        background.getPaint().setColor(ThemeUtils.getEditTextBackground());
-        editText.setPadding(Dim.dp12, Dim.dp8, Dim.dp12, Dim.dp8);
-        editText.setBackground(background);
-        editText.setClipToOutline(true);
-        return editText;
+        activeDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (activeDialog == d) {
+                activeDialog = null;
+            }
+        });
+        try {
+            dialog.show();
+        } catch (WindowManager.BadTokenException ignored) {
+            activeDialog = null;
+        }
     }
 }

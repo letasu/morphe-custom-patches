@@ -31,7 +31,9 @@ public class HideButtonsPatch {
     }
 
     /**
-     * Injection point
+     * Injection point.
+     * Called only for the notification button, as the same top bar button class also builds other
+     * buttons, such as the search button on artist pages.
      */
     public static void hideNotificationButton(View view) {
         if (view.getParent() instanceof ViewGroup viewGroup) {
@@ -44,5 +46,27 @@ public class HideButtonsPatch {
      */
     public static void hideSearchButton(View view) {
         Utils.hideViewBy0dpUnderCondition(Settings.HIDE_SEARCH_BUTTON, view);
+    }
+
+    /**
+     * Injection point
+     */
+    public static void hideVoiceSearchButton(View view) {
+        // The app changes the visibility of this button while typing, so it is hidden by size.
+        Utils.hideViewBy0dpUnderCondition(Settings.HIDE_VOICE_SEARCH_BUTTON, view);
+    }
+
+    /**
+     * Injection point
+     */
+    public static void hideSoundSearchButton(View view) {
+        Utils.hideViewBy0dpUnderCondition(Settings.HIDE_SOUND_SEARCH_BUTTON, view);
+    }
+
+    /**
+     * Injection point
+     */
+    public static void hideLibraryNewButton(View view) {
+        Utils.hideViewBy0dpUnderCondition(Settings.HIDE_LIBRARY_NEW_BUTTON, view);
     }
 }

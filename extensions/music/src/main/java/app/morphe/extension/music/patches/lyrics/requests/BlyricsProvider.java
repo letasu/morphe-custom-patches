@@ -13,9 +13,9 @@ import org.json.JSONObject;
 
 import java.net.HttpURLConnection;
 
-import app.morphe.extension.music.patches.lyrics.Lyrics;
-import app.morphe.extension.music.patches.lyrics.TrackInfo;
+import app.morphe.extension.music.patches.lyrics.model.TrackInfo;
 import app.morphe.extension.shared.requests.Requester;
+import app.morphe.extension.music.patches.lyrics.parsers.TTMLParser;
 
 public final class BlyricsProvider implements LyricsProvider {
 
@@ -28,7 +28,7 @@ public final class BlyricsProvider implements LyricsProvider {
 
     @Nullable
     @Override
-    public Lyrics fetch(TrackInfo track) throws Exception {
+    public FetchResult fetch(TrackInfo track) throws Exception {
         if (track.title().isEmpty() || track.artist().isEmpty()) {
             return null;
         }
@@ -55,7 +55,7 @@ public final class BlyricsProvider implements LyricsProvider {
             if (ttml == null) {
                 return null;
             }
-            return TtmlParser.ttmlToLyrics(ttml, name(), null);
+            return FetchResult.blind(TTMLParser.ttmlToLyrics(ttml, name(), null));
         } finally {
             if (connection != null) {
                 connection.disconnect();

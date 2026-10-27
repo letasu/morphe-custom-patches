@@ -17,7 +17,7 @@ import app.morphe.patcher.patch.booleanOption
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.patch.resourcePatch
 import app.morphe.patcher.resource.ResourceType
-import app.morphe.patcher.resource.resourceId
+import app.morphe.patcher.resourceLiteral
 import app.morphe.patches.shared.misc.litho.filter.addLithoFilter
 import app.morphe.patches.shared.misc.settings.preference.PreferenceCategory
 import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
@@ -27,6 +27,7 @@ import app.morphe.patches.youtube.misc.litho.filter.lithoFilterPatch
 import app.morphe.patches.youtube.misc.litho.observer.layoutReloadObserverPatch
 import app.morphe.patches.youtube.misc.navigation.addBottomBarContainerHook
 import app.morphe.patches.youtube.misc.navigation.navigationBarHookPatch
+import app.morphe.patches.youtube.misc.playservice.is_21_02_or_greater
 import app.morphe.patches.youtube.misc.playservice.is_21_05_or_greater
 import app.morphe.patches.youtube.misc.playservice.is_21_17_or_greater
 import app.morphe.patches.youtube.misc.playservice.versionCheckPatch
@@ -35,9 +36,9 @@ import app.morphe.patches.youtube.misc.settings.settingsPatch
 import app.morphe.patches.youtube.shared.Constants.COMPATIBILITY_YOUTUBE
 import app.morphe.util.addInstructionsAtControlFlowLabel
 import app.morphe.util.findElementByAttributeValueOrThrow
-import app.morphe.util.forEachLiteralValueInstruction
 import app.morphe.util.getReference
 import app.morphe.util.indexOfFirstInstructionOrThrow
+import app.morphe.util.matchAllMethodIndicesForEach
 import app.morphe.util.removeFromParent
 import app.morphe.util.returnLate
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
@@ -187,9 +188,9 @@ val hideShortsComponentsPatch = bytecodePatch(
         // region Hide sound button.
 
         if (!is_21_05_or_greater) {
-            forEachLiteralValueInstruction(
-                resourceId(ResourceType.DIMEN, "reel_player_right_pivot_v2_size")
-            ) { literalInstructionIndex ->
+            resourceLiteral(
+                ResourceType.DIMEN, "reel_player_right_pivot_v2_size"
+            ).matchAllMethodIndicesForEach { literalInstructionIndex ->
                 val targetIndex = indexOfFirstInstructionOrThrow(literalInstructionIndex) {
                     getReference<MethodReference>()?.name == "getDimensionPixelSize"
                 } + 1
@@ -217,9 +218,13 @@ val hideShortsComponentsPatch = bytecodePatch(
         )
 
         // Set the pivotBar view.
-        SetPivotBarVisibilityFingerprint.let { result ->
+        if (is_21_02_or_greater) {
+            SetPivotBarVisibilityFingerprint
+        } else {
+            SetPivotBarVisibilityLegacyFingerprint
+        }.let { result ->
             result.method.apply {
-                val index = result.instructionMatches.first().index
+                val index = result.instructionMatches.last().index
                 val register = getInstruction<OneRegisterInstruction>(index).registerA
 
                 addInstruction(

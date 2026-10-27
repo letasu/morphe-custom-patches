@@ -8,7 +8,6 @@
 package app.morphe.patches.music.layout.sponsorblock
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.all.misc.resources.addAppResources
 import app.morphe.patches.all.misc.resources.addResourcesPatch
@@ -25,11 +24,9 @@ import app.morphe.patches.shared.misc.settings.preference.PreferenceCategory
 import app.morphe.patches.shared.misc.settings.preference.PreferenceScreenPreference
 import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
 import app.morphe.patches.shared.misc.settings.preference.TextPreference
+import app.morphe.patches.shared.misc.settings.preference.screenInfoPreferenceCategory
 import app.morphe.patches.youtube.layout.sponsorblock.categoryPreference
 import app.morphe.util.findFreeRegister
-import app.morphe.util.getReference
-import app.morphe.util.indexOfFirstInstructionReversedOrThrow
-import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 
@@ -65,15 +62,8 @@ val musicSponsorBlockPatch = bytecodePatch(
 
         // Compact-player seekbar: hook onMeasure to capture the bounding Rect and draw() to paint
         // segment markers over the timeline.
-        val rectField = MusicTimeBarOnMeasureFingerprint.method.run {
-            val rectIndex = indexOfFirstInstructionReversedOrThrow(
-                implementation!!.instructions.size - 1
-            ) {
-                opcode == Opcode.IGET_OBJECT &&
-                        getReference<FieldReference>()?.type == "Landroid/graphics/Rect;"
-            }
-            getInstruction<ReferenceInstruction>(rectIndex).reference as FieldReference
-        }
+        val rectField = MusicTimeBarOnMeasureFingerprint.instructionMatches.first()
+            .getInstruction<ReferenceInstruction>().reference as FieldReference
 
         MusicTimeBarDrawFingerprint.method.apply {
             // Inject right after super.draw() so the overlay runs every frame regardless of
@@ -118,12 +108,12 @@ val musicSponsorBlockPatch = bytecodePatch(
                 )
             ),
 
-            PreferenceCategory(
+            screenInfoPreferenceCategory(
                 key = "morphe_sb_about",
-                sorting = PreferenceScreenPreference.Sorting.UNSORTED,
                 preferences = setOf(
                     NonInteractivePreference(
                         key = "morphe_sb_about_api",
+                        titleKey = null,
                         tag = "app.morphe.extension.shared.sponsorblock.ui.SponsorBlockAboutPreference",
                         selectable = true
                     )

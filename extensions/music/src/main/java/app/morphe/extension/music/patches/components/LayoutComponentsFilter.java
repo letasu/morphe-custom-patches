@@ -21,7 +21,9 @@ public final class LayoutComponentsFilter extends Filter {
 
     private static final String TIMED_LYRICS_IDENTIFIER = "timed_lyrics";
     private static final String TOGGLE_BUTTON_PATH = "toggle_button.e";
+    private static final String LIST_ITEM_EXTRA_DETAILS_PATH = "music_list_item_extra_details.e";
 
+    private final StringFilterGroup downloadButton;
     private final StringFilterGroup lyricsShareButton;
     private final StringFilterGroup lyricsTranslateButton;
 
@@ -64,6 +66,12 @@ public final class LayoutComponentsFilter extends Filter {
                 "music_action_card_shelf.e"
         );
 
+        // Download button under the description of a podcast episode in episode lists.
+        downloadButton = new StringFilterGroup(
+                Settings.HIDE_DOWNLOAD_BUTTON_IN_PODCAST,
+                "music_download_button.e"
+        );
+
         final StringFilterGroup playlistShelves = new StringFilterGroup(
                 Settings.HIDE_PLAYLIST_SHELVES,
                 "music_container_card_shelf.e"
@@ -75,6 +83,7 @@ public final class LayoutComponentsFilter extends Filter {
         );
 
         addPathCallbacks(
+                downloadButton,
                 exploreShelf,
                 gridShelves,
                 horizontalShelves,
@@ -91,7 +100,7 @@ public final class LayoutComponentsFilter extends Filter {
     public boolean isFiltered(ContextInterface contextInterface,
                               String identifier,
                               String accessibility,
-                              String path,
+                              CharSequence path,
                               byte[] buffer,
                               BufferAsciiStrings asciiStrings,
                               StringFilterGroup matchedGroup,
@@ -103,11 +112,15 @@ public final class LayoutComponentsFilter extends Filter {
             }
 
             if (matchedGroup == lyricsShareButton) {
-                // `button.e` also matches `toggle_button.e` - let the translate callback own that path.
-                return !path.contains(TOGGLE_BUTTON_PATH);
+                // `button.e` also matches `toggle_button.e` - let the translation callback own that path.
+                return !Utils.contains(path, TOGGLE_BUTTON_PATH);
             }
 
             return true;
+        }
+
+        if (matchedGroup == downloadButton) {
+            return Utils.contains(path, LIST_ITEM_EXTRA_DETAILS_PATH);
         }
 
         return true;
@@ -118,6 +131,13 @@ public final class LayoutComponentsFilter extends Filter {
      */
     public static void hideAudioVideoToggle(View view) {
         Utils.hideViewBy0dpUnderCondition(Settings.HIDE_AUDIO_VIDEO_TOGGLE, view);
+    }
+
+    /**
+     * Injection point.
+     */
+    public static void hideFilterBar(View view) {
+        Utils.hideViewBy0dpUnderCondition(Settings.HIDE_FILTER_BAR, view);
     }
 
     /**

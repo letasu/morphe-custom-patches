@@ -24,6 +24,7 @@ import app.morphe.patches.shared.misc.settings.preference.noTitleUnsortedPrefere
 import app.morphe.patches.youtube.misc.extension.sharedExtensionPatch
 import app.morphe.patches.youtube.misc.playservice.is_20_28_or_greater
 import app.morphe.patches.youtube.misc.playservice.is_21_35_or_greater
+import app.morphe.patches.youtube.misc.playservice.is_21_42_or_greater
 import app.morphe.patches.youtube.misc.playservice.versionCheckPatch
 import app.morphe.patches.youtube.misc.settings.settingsPatch
 import app.morphe.patches.youtube.shared.Constants.COMPATIBILITY_YOUTUBE
@@ -105,8 +106,26 @@ val hidePlayerOverlayButtonsPatch = bytecodePatch(
 
         // region Hide cast button.
 
-        if (is_21_35_or_greater) {
+        if (is_21_42_or_greater) {
             OverlayCastButtonVisibilityFingerprint.let {
+                // Media route button and mdx entry point button.
+                arrayOf(
+                    it.instructionMatches[3],
+                    it.instructionMatches[1]
+                ).forEach { match ->
+                    val register = match.getInstruction<FiveRegisterInstruction>().registerD
+
+                    it.method.addInstructions(
+                        match.index,
+                        """
+                            invoke-static { v$register }, $EXTENSION_CLASS->hideCastButton(I)I
+                            move-result v$register
+                        """
+                    )
+                }
+            }
+        } else if (is_21_35_or_greater) {
+            OverlayCastButtonVisibilityLegacy2135Fingerprint.let {
                 it.method.apply {
                     var instructionIndex = it.instructionMatches.first().index
                     var instructionRegister = getInstruction<FiveRegisterInstruction>(
@@ -175,33 +194,6 @@ val hidePlayerOverlayButtonsPatch = bytecodePatch(
 
         // endregion
 
-        // region Hide autoplay button.
-
-        LayoutConstructorFingerprint.method.apply {
-            val constIndex = indexOfFirstResourceIdOrThrow("autonav_toggle")
-            val constRegister = getInstruction<OneRegisterInstruction>(constIndex).registerA
-
-            // Add a conditional branch around the code that inflates and adds the auto-repeat button.
-            val gotoIndex = indexOfFirstInstructionOrThrow(constIndex) {
-                val parameterTypes = getReference<MethodReference>()?.parameterTypes
-                opcode == Opcode.INVOKE_VIRTUAL &&
-                    parameterTypes?.size == 2 &&
-                    parameterTypes.first() == "Landroid/view/ViewStub;"
-            } + 1
-
-            addInstructionsWithLabels(
-                constIndex,
-                """
-                    invoke-static {}, $EXTENSION_CLASS->hideAutoplayButton()Z
-                    move-result v$constRegister
-                    if-nez v$constRegister, :hidden
-                """,
-                ExternalLabel("hidden", getInstruction(gotoIndex)),
-            )
-        }
-
-        // endregion
-
         // region Hide collapse button.
 
         TitleAnchorFingerprint.let {
@@ -241,8 +233,9 @@ val hidePlayerOverlayButtonsPatch = bytecodePatch(
                         move-result-object v$insertRegister
                         if-nez v$insertRegister, :show
                         return-void
-                    """,
-                    ExternalLabel("show", getInstruction(insertIndex))
+                        :show
+                        nop
+                    """
                 )
             }
         }
@@ -267,6 +260,33 @@ val hidePlayerOverlayButtonsPatch = bytecodePatch(
                     """
                 )
             }
+        }
+
+        // endregion
+
+        // region Hide autoplay button.
+
+        LayoutConstructorFingerprint.method.apply {
+            val constIndex = indexOfFirstResourceIdOrThrow("autonav_toggle")
+            val constRegister = getInstruction<OneRegisterInstruction>(constIndex).registerA
+
+            // Add a conditional branch around the code that inflates and adds the auto-repeat button.
+            val gotoIndex = indexOfFirstInstructionOrThrow(constIndex) {
+                val parameterTypes = getReference<MethodReference>()?.parameterTypes
+                opcode == Opcode.INVOKE_VIRTUAL &&
+                        parameterTypes?.size == 2 &&
+                        parameterTypes.first() == "Landroid/view/ViewStub;"
+            } + 1
+
+            addInstructionsWithLabels(
+                constIndex,
+                """
+                    invoke-static {}, $EXTENSION_CLASS->hideAutoplayButton()Z
+                    move-result v$constRegister
+                    if-nez v$constRegister, :hidden
+                """,
+                ExternalLabel("hidden", getInstruction(gotoIndex)),
+            )
         }
 
         // endregion

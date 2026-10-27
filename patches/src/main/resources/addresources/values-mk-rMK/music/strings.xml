@@ -16,6 +16,11 @@ Second \"item\" text"</string>
 
 -->
 <resources>
+  <!-- misc.androidauto.androidAutoPatch -->
+  <!-- app.morphe.patches.music.interaction.jam -->
+  <string name="morphe_music_jam_cancel">Откажи</string>
+  <string name="morphe_music_jam_done">Готово</string>
+  <string name="morphe_music_jam_details">Детали</string>
   <!-- layout.branding.customBrandingPatch -->
   <!-- layout.branding.header.changeHeaderPatch -->
   <string name="morphe_header_logo_title">Лого на заглавието</string>
@@ -23,8 +28,9 @@ Second \"item\" text"</string>
   <string name="morphe_header_logo_entry_3">По нарачка</string>
   <!-- misc.album.albumMusicVideoPatch -->
   <!-- 'Spoof video streams' should match the language used in 'morphe_spoof_video_streams_screen_title' -->
+  <!-- misc.audiovideoswitch.enableAudioVideoSwitchPatch -->
   <!-- interaction.downloads.downloadsPatch -->
-  <!-- 'Download' should be translated using the same localized wording YouTube displays for the button. -->
+  <!-- 'Download' should be translated using the same localized wording YouTube displays for the menu. -->
   <string name="morphe_music_downloads_next">Следно</string>
   <!-- misc.settings.settingsPatch -->
   <!-- In languages where "About" is ambiguous, translate this as "About Morphe" (i.e., About this app). -->
@@ -72,11 +78,12 @@ Second \"item\" text"</string>
   <string name="morphe_music_crossfade_paused_toast">Фадење е паузирано за оваа сесија</string>
   <string name="morphe_music_crossfade_resumed_toast">Фадење е продолжено</string>
   <string name="morphe_music_crossfade_video_mode_disabled_toast">Режим на видео не е достапен додека е вклучено преминувањето</string>
-  <string name="morphe_music_crossfade_about_title">За апликацијата</string>
-  <!-- Banner row has no text; it shows a full-width graphic via a custom layout. -->
   <!-- interaction.remember.repeatstate.rememberRepeatStatePatch-->
   <!-- interaction.remember.shufflestate.rememberShuffleStatePatch -->
+  <!-- video.speed.playbackSpeedPatch -->
   <!-- interaction.dislikeredirection.disableDislikeRedirectionPatch -->
+  <!-- interaction.playlisttracktap.playlistTrackTapPatch -->
+  <!-- 'Added to queue' should be translated using the same localized wording YouTube Music displays for the toast. -->
   <!-- layout.buttons.hideButtonsPatch -->
   <!-- layout.hide.actionbuttons.hideActionButtonsPatch -->
   <!-- 'Live chat replay' should be translated using the same localized wording YouTube Music displays for the button. -->
@@ -98,7 +105,7 @@ Second \"item\" text"</string>
   <string name="morphe_change_start_page_entry_playlists">Плејлисти</string>
   <string name="morphe_change_start_page_entry_search">Пребарување</string>
   <string name="morphe_change_start_page_entry_subscriptions">Претплати</string>
-  <!-- layout.compactheader.hideFilterBarPatch -->
+  <!-- layout.orientation.forcePortraitOrientationPatch -->
   <!-- layout.miniplayer.changeMiniplayerColorPatch -->
   <string name="morphe_music_change_miniplayer_color_title">Промени ја бојата на мини-плеер</string>
   <string name="morphe_music_change_miniplayer_color_summary">Бојата на мини-плеер се прилагодува на целосен екран</string>
@@ -133,11 +140,9 @@ Second \"item\" text"</string>
   <!-- 'scrobble' must be kept untranslated -->
   <!-- 'scrobbling' must be kept untranslated -->
   <!-- 'scrobbling' must be kept untranslated -->
-  <!-- 'scrobbling' must be kept untranslated -->
   <!-- layout.lyrics.lyricsPatch -->
-  <string name="morphe_music_lyrics_section_about_title">Филмови</string>
-  <!-- Shown under the preference; the actual priority list is rendered live by the custom preference. -->
   <!-- Shown under the lyrics. The placeholder is a service name such as LRCLIB. -->
   <!-- Tappable label under the lyrics that turns the translation on. -->
+  <string name="morphe_romanize_language_DEFAULT">Автоматски</string>
   <!-- misc.spoof.appversion.spoofAppVersionPatch -->
 </resources>

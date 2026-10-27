@@ -28,7 +28,7 @@ def validate(data):
 
 
 def write_json(path, data):
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 def prepare(version, description):
@@ -45,13 +45,13 @@ def prepare(version, description):
     text, count = re.subn(r"(?m)^version\s*=.*$", f"version = {version}", properties.read_text(encoding="utf-8"))
     if count != 1:
         raise ValueError("Expected exactly one Gradle version")
-    properties.write_text(text, encoding="utf-8")
+    properties.write_text(text, encoding="utf-8", newline="\n")
     write_json(ROOT / "patches-bundle.json", data)
     patch_list = ROOT / "patches-list.json"
     text, count = re.subn(r'"version": "[^"]+"', f'"version": "{version}"', patch_list.read_text(encoding="utf-8"), count=1)
     if count != 1:
         raise ValueError("Missing patch-list version")
-    patch_list.write_text(text, encoding="utf-8")
+    patch_list.write_text(text, encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

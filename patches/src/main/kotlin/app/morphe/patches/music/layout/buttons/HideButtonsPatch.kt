@@ -12,6 +12,7 @@ package app.morphe.patches.music.layout.buttons
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.resource.ResourceType
@@ -21,9 +22,10 @@ import app.morphe.patches.music.misc.settings.PreferenceScreen
 import app.morphe.patches.music.misc.settings.settingsPatch
 import app.morphe.patches.music.shared.Constants.COMPATIBILITY_YOUTUBE_MUSIC
 import app.morphe.patches.shared.misc.settings.preference.SwitchPreference
+import app.morphe.util.findFreeRegister
 import app.morphe.util.indexOfFirstInstructionOrThrow
-import app.morphe.util.indexOfFirstInstructionReversedOrThrow
 import app.morphe.util.indexOfFirstLiteralInstructionOrThrow
+import app.morphe.util.p0Register
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
@@ -33,7 +35,7 @@ private const val EXTENSION_CLASS = "Lapp/morphe/extension/music/patches/HideBut
 @Suppress("unused")
 val hideButtonsPatch = bytecodePatch(
     name = "Hide buttons",
-    description = "Adds options to hide the cast, history, notification, and search buttons."
+    description = "Adds options to hide the cast, history, notification, search, voice search, sound search, and Library New buttons."
 ) {
     dependsOn(
         sharedExtensionPatch,
@@ -45,13 +47,15 @@ val hideButtonsPatch = bytecodePatch(
     execute {
         val playerOverlayChip = resourceId(ResourceType.ID, "player_overlay_chip")
         val searchButton = resourceId(ResourceType.LAYOUT, "search_button")
-        val topBarMenuItemImageView = resourceId(ResourceType.ID, "top_bar_menu_item_image_view")
 
         PreferenceScreen.GENERAL.addPreferences(
             SwitchPreference("morphe_music_hide_cast_button"),
             SwitchPreference("morphe_music_hide_history_button"),
             SwitchPreference("morphe_music_hide_notification_button"),
-            SwitchPreference("morphe_music_hide_search_button")
+            SwitchPreference("morphe_music_hide_search_button"),
+            SwitchPreference("morphe_music_hide_voice_search_button"),
+            SwitchPreference("morphe_music_hide_sound_search_button"),
+            SwitchPreference("morphe_music_hide_library_new_button", summary = true)
         )
 
         // Region for hide history button in the top bar.
@@ -70,26 +74,25 @@ val hideButtonsPatch = bytecodePatch(
             }
         }
 
-        HistoryMenuItemOfflineTabFingerprint.method.apply {
-            val index = indexOfFirstInstructionReversedOrThrow(
-                HistoryMenuItemOfflineTabFingerprint.filters!!.last()
-            )
-            val register = getInstruction<FiveRegisterInstruction>(index).registerD
+        HistoryMenuItemOfflineTabFingerprint.let {
+            it.method.apply {
+                val index = it.instructionMatches.last().index
+                val register = getInstruction<FiveRegisterInstruction>(index).registerD
 
-            addInstructions(
-                index,
-                """
-                    invoke-static { v$register }, $EXTENSION_CLASS->hideHistoryButton(Z)Z
-                    move-result v$register
-                """
-            )
+                addInstructions(
+                    index,
+                    """
+                        invoke-static { v$register }, $EXTENSION_CLASS->hideHistoryButton(Z)Z
+                        move-result v$register
+                    """
+                )
+            }
         }
 
-        // Region for hide cast, search and notification buttons in the top bar.
+        // Region for hide cast and search buttons in the top bar.
         arrayOf(
             Triple(PlayerOverlayChipFingerprint, playerOverlayChip, "hideCastButton"),
-            Triple(SearchActionViewFingerprint, searchButton, "hideSearchButton"),
-            Triple(TopBarMenuItemImageViewFingerprint, topBarMenuItemImageView, "hideNotificationButton")
+            Triple(SearchActionViewFingerprint, searchButton, "hideSearchButton")
         ).forEach { (fingerprint, resourceIdLiteral, methodName) ->
             fingerprint.method.apply {
                 val resourceIndex = indexOfFirstLiteralInstructionOrThrow(resourceIdLiteral)
@@ -104,6 +107,63 @@ val hideButtonsPatch = bytecodePatch(
                             "$EXTENSION_CLASS->$methodName(Landroid/view/View;)V"
                 )
             }
+        }
+
+        // Region for hide notification button in the top bar.
+        // Every top bar button of a page is built by this one method, for example the search button
+        // on an artist page. Only the notification button is created with a notification count
+        // key (an Optional field of the class), so that tells it apart from the others.
+        TopBarMenuItemImageViewFingerprint.let {
+            it.method.apply {
+                val targetIndex = it.instructionMatches[1].index
+                val targetRegister = getInstruction<OneRegisterInstruction>(targetIndex).registerA
+                val optionalField = it.instructionMatches.last().getFieldAccessed()
+
+                // Before this point only the inflated layout and the image view are still in use.
+                val insertIndex = targetIndex + 1
+                val freeRegister = findFreeRegister(insertIndex, targetRegister, p0Register)
+
+                addInstructionsWithLabels(
+                    insertIndex,
+                    """
+                        iget-object v$freeRegister, p0, $optionalField
+                        if-eqz v$freeRegister, :not_notification_button
+                        invoke-virtual { v$freeRegister }, ${optionalField.type}->isPresent()Z
+                        move-result v$freeRegister
+                        if-eqz v$freeRegister, :not_notification_button
+                        invoke-static { v$targetRegister }, $EXTENSION_CLASS->hideNotificationButton(Landroid/view/View;)V
+                        :not_notification_button
+                        nop
+                    """
+                )
+            }
+        }
+
+        // Region for hide voice search and sound search buttons in the search bar.
+        SearchVoiceButtonsFingerprint.matchAll().forEach { match ->
+            // Insert at the later index first, so the earlier index stays valid.
+            arrayOf(
+                match.instructionMatches[3] to "hideSoundSearchButton",
+                match.instructionMatches[1] to "hideVoiceSearchButton"
+            ).forEach { (moveResult, methodName) ->
+                val register = moveResult.getInstruction<OneRegisterInstruction>().registerA
+
+                match.method.addInstruction(
+                    moveResult.index + 1,
+                    "invoke-static { v$register }, $EXTENSION_CLASS->$methodName(Landroid/view/View;)V"
+                )
+            }
+        }
+
+        // Region for hide the floating New button in the Library tab.
+        LibraryNewButtonFingerprint.let {
+            val moveResult = it.instructionMatches[1]
+            val register = moveResult.getInstruction<OneRegisterInstruction>().registerA
+
+            it.method.addInstruction(
+                moveResult.index + 1,
+                "invoke-static { v$register }, $EXTENSION_CLASS->hideLibraryNewButton(Landroid/view/View;)V"
+            )
         }
 
         // Region for hide cast button in the player.

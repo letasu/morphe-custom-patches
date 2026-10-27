@@ -25,9 +25,12 @@ import java.security.spec.ECGenParameterSpec;
 import java.util.List;
 import java.util.Locale;
 
-import app.morphe.extension.music.patches.lyrics.Lyrics;
-import app.morphe.extension.music.patches.lyrics.LyricsLine;
-import app.morphe.extension.music.patches.lyrics.TrackInfo;
+import app.morphe.extension.music.patches.lyrics.model.Lyrics;
+import app.morphe.extension.music.patches.lyrics.model.LyricsMerge;
+import app.morphe.extension.music.patches.lyrics.model.LyricsLine;
+import app.morphe.extension.music.patches.lyrics.model.TrackInfo;
+import app.morphe.extension.music.patches.lyrics.parsers.LRCParser;
+import app.morphe.extension.music.patches.lyrics.parsers.TTMLParser;
 import app.morphe.extension.music.shared.VideoInformation;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.requests.Requester;
@@ -47,19 +50,20 @@ public final class UnisonProvider implements LyricsProvider {
 
     @Nullable
     @Override
-    public Lyrics fetch(TrackInfo track) throws Exception {
+    public FetchResult fetch(TrackInfo track) throws Exception {
         final String videoId = VideoInformation.getVideoId();
         if (videoId.isEmpty()) {
             return null;
         }
         final String title = track.title() != null ? track.title() : "";
         final String artist = track.artist() != null ? track.artist() : "";
-        final int duration = track.durationSeconds();
+        final long videoLengthMs = VideoInformation.getVideoLength();
+        final int duration = videoLengthMs > 0
+                ? (int) (videoLengthMs / 1000)
+                : track.durationSeconds();
         final String album = track.album();
 
-        // Unison is keyed on the YouTube video id; the server chooses the matching lyrics,
-        // mirroring the Better Lyrics client. There is no fuzzy metadata-search fallback.
-        return fetchByVideoId(videoId, title, artist, duration, album);
+        return FetchResult.of(fetchByVideoId(videoId, title, artist, duration, album));
     }
 
     @Nullable
@@ -102,7 +106,11 @@ public final class UnisonProvider implements LyricsProvider {
             if (format == null || lyrics == null) {
                 return null;
             }
-            return parseLyrics(format, lyrics);
+            final JSONObject submitter = data.optJSONObject("submitter");
+            final String submitterName = submitter != null
+                    ? LyricsRequests.optString(submitter, "displayName")
+                    : null;
+            return parseLyrics(format, lyrics, videoId, submitterName);
         } catch (IOException | JSONException ex) {
             Logger.printDebug(() -> "Could not fetch Unison lyrics", ex);
             return null;
@@ -172,27 +180,39 @@ public final class UnisonProvider implements LyricsProvider {
         return builder.toString();
     }
 
+    private static String sourceUrl(String videoId) {
+        return "https://unison.boidu.dev/song/" + videoId;
+    }
+
     @Nullable
-    private Lyrics parseLyrics(String format, String lyrics) {
+    private Lyrics parseLyrics(String format, String lyrics, String videoId,
+                               @Nullable String submitter) {
         switch (format.toLowerCase(Locale.ROOT)) {
             case "ttml":
-                return TtmlParser.ttmlToLyrics(lyrics, name(), null);
+                return withSubmitter(
+                        TTMLParser.ttmlToLyrics(lyrics, name(), sourceUrl(videoId)), submitter);
             case "lrc":
-                LrcParser.LrcParseResult result = LrcParser.parseSyncedWithCreditLines(lyrics);
+                LRCParser.LrcParseResult result = LRCParser.parseSyncedWithCreditLines(lyrics);
                 if (result.lines.isEmpty()) {
                     return null;
                 }
-                return new Lyrics(result.lines, name(), true, null, null, null,
+                return withSubmitter(new Lyrics(result.lines, name(), true,
+                        null, null, null,
                         result.creditLines.isEmpty() ? null : result.creditLines,
-                        lyrics, "lrc", null);
+                        lyrics, "lrc", sourceUrl(videoId)), submitter);
             case "plain":
-                final List<LyricsLine> plain = LrcParser.parsePlain(lyrics);
+                final List<LyricsLine> plain = LRCParser.parsePlain(lyrics);
                 if (plain.isEmpty()) {
                     return null;
                 }
-                return new Lyrics(plain, name(), false, null, null, null, null, lyrics, "plain", null);
+                return withSubmitter(new Lyrics(plain, name(), false,
+                        null, null, null, null, lyrics, "plain", sourceUrl(videoId)), submitter);
             default:
                 return null;
         }
+    }
+
+    private static Lyrics withSubmitter(@Nullable Lyrics lyrics, @Nullable String submitter) {
+        return LyricsMerge.addSongwriter(lyrics, submitter == null ? null : "Submitted by " + submitter);
     }
 }

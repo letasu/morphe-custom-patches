@@ -13,15 +13,21 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.net.HttpURLConnection;
+import java.util.concurrent.atomic.AtomicLong;
 
-import app.morphe.extension.music.patches.lyrics.Lyrics;
-import app.morphe.extension.music.patches.lyrics.TrackInfo;
+import app.morphe.extension.music.patches.lyrics.model.Lyrics;
+import app.morphe.extension.music.patches.lyrics.model.TrackInfo;
+import app.morphe.extension.music.patches.lyrics.parsers.TTMLParser;
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.requests.Requester;
 
-public final class AmllProvider implements LyricsProvider {
+public final class AMLLProvider implements LyricsProvider {
 
     private static final String BASE_URL = "https://api.amll.dev/v1/lyrics";
+
+    private static final long REQUEST_THROTTLE_MS = 500;
+
+    private static final AtomicLong lastRequestTime = new AtomicLong(0);
 
     @Override
     public String name() {
@@ -30,21 +36,23 @@ public final class AmllProvider implements LyricsProvider {
 
     @Nullable
     @Override
-    public Lyrics fetch(TrackInfo track) throws Exception {
+    public FetchResult fetch(TrackInfo track) throws Exception {
         if (track.title().isEmpty() || track.artist().isEmpty()) {
             return null;
         }
 
-        // 1) Resolve the AMLL lyric id from the track metadata.
-        final long lyricId = searchLyricId(track.title(), track.artist(), track.album());
-
+        final JSONObject best = searchBest(track.title(), track.artist(), track.album());
+        if (best == null) {
+            return null;
+        }
+        final long lyricId = best.optLong("id", -1);
         if (lyricId < 0) {
             return null;
         }
 
-        // word-level timing; the LyricsManager falls back to line sync if a line lacks words.
         HttpURLConnection getConnection = null;
         try {
+            LyricsRequests.throttle(lastRequestTime, REQUEST_THROTTLE_MS);
             getConnection = LyricsRequests.openConnection(
                     BASE_URL + "/get?id=" + lyricId + "&format=ttml");
             if (getConnection.getResponseCode() != Requester.HTTP_STATUS_CODE_SUCCESS) {
@@ -60,7 +68,11 @@ public final class AmllProvider implements LyricsProvider {
             if (ttml == null) {
                 return null;
             }
-            return TtmlParser.ttmlToLyrics(ttml, name(), null);
+            Lyrics lyrics = TTMLParser.ttmlToLyrics(ttml, name(), sourceUrl(getData, best));
+            return FetchResult.searched(lyrics,
+                    LyricsRequests.stringList(best, "musicNames"),
+                    LyricsRequests.stringList(best, "artistNames"),
+                    0L, track);
         } finally {
             if (getConnection != null) {
                 getConnection.disconnect();
@@ -68,7 +80,31 @@ public final class AmllProvider implements LyricsProvider {
         }
     }
 
-    private long searchLyricId(String title, String artist, String album) {
+    @Nullable
+    private static String sourceUrl(JSONObject getData, JSONObject best) {
+        String file = firstPath(getData);
+        if (file == null) {
+            file = firstPath(best);
+        }
+        if (file == null || file.isEmpty()) {
+            return null;
+        }
+        return "https://amlldb.bikonoo.com/view-lyric.html?file=" + file;
+    }
+
+    @Nullable
+    private static String firstPath(JSONObject object) {
+        for (String key : new String[]{"path", "file", "filename", "filePath"}) {
+            final String value = LyricsRequests.optString(object, key);
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    @Nullable
+    private JSONObject searchBest(String title, String artist, String album) {
         HttpURLConnection searchConnection = null;
         try {
             String searchUrl = String.format(
@@ -82,27 +118,28 @@ public final class AmllProvider implements LyricsProvider {
                 searchUrl += "&albumName=" + LyricsRequests.encode(album);
             }
 
+            LyricsRequests.throttle(lastRequestTime, REQUEST_THROTTLE_MS);
             searchConnection = LyricsRequests.openConnection(searchUrl);
             if (searchConnection.getResponseCode() != Requester.HTTP_STATUS_CODE_SUCCESS) {
-                return -1;
+                return null;
             }
             JSONObject searchRoot = Requester.parseJSONObject(searchConnection);
             JSONObject searchData = searchRoot.optJSONObject("data");
             if (searchData == null) {
-                return -1;
+                return null;
             }
             JSONArray items = searchData.optJSONArray("items");
             if (items == null || items.length() == 0) {
-                return -1;
+                return null;
             }
             JSONObject best = items.optJSONObject(0);
-            if (best == null) {
-                return -1;
+            if (best == null || best.optLong("id", -1) < 0) {
+                return null;
             }
-            return best.optLong("id", -1);
+            return best;
         } catch (Exception ex) {
             Logger.printInfo(() -> "Could not fetch lyrics", ex);
-            return -1;
+            return null;
         } finally {
             if (searchConnection != null) {
                 searchConnection.disconnect();

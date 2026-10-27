@@ -48,6 +48,7 @@ import app.morphe.extension.shared.sponsorblock.requests.SBRequester.SegmentSubm
 import app.morphe.extension.shared.ui.CustomDialog;
 import app.morphe.extension.youtube.patches.VideoInformation;
 import app.morphe.extension.youtube.settings.Settings;
+import app.morphe.extension.youtube.shared.VideoState;
 import app.morphe.extension.youtube.sponsorblock.ui.SponsorBlockViewController;
 
 /**
@@ -182,11 +183,8 @@ public class SponsorBlockUtils {
             final long videoLength = VideoInformation.getVideoLength();
             SegmentSubmitAction submitType = isHighlight ? SegmentSubmitAction.HIGHLIGHT : SegmentSubmitAction.SKIP;
 
-            if (start < 0 || end < 0 || videoLength <= 0 || videoId.isEmpty() || segmentCategory == null) {
-                Logger.printException(() -> "Invalid parameters");
-                return;
-            }
-            if (!isHighlight && start >= end) {
+            if (start < 0 || end < 0 || videoLength <= 0 || videoId.isEmpty() || segmentCategory == null
+                    || (!isHighlight && start >= end)) {
                 Logger.printException(() -> "Invalid parameters");
                 return;
             }
@@ -218,7 +216,13 @@ public class SponsorBlockUtils {
                             formatSegmentTime(newSponsorSegmentDialogShownMillis)),
                     null,
                     str("morphe_sb_new_segment_mark_end"),
-                    () -> newSponsorSegmentEndMillis = newSponsorSegmentDialogShownMillis,
+                    () -> {
+                        final long videoLength = VideoInformation.getVideoLength();
+                        newSponsorSegmentEndMillis =
+                                VideoState.getCurrent() == VideoState.ENDED && videoLength > 0
+                                        ? videoLength
+                                        : newSponsorSegmentDialogShownMillis;
+                    },
                     null,
                     str("morphe_sb_new_segment_mark_start"),
                     () -> newSponsorSegmentStartMillis = newSponsorSegmentDialogShownMillis,
@@ -288,11 +292,8 @@ public class SponsorBlockUtils {
                     str("morphe_sb_new_segment_confirm_submit"),
                     () -> {
                         SponsorBlockViewController.hideNewSegmentLayout();
-                        SegmentCategory[] categories = SegmentCategory.categoriesWithoutUnsubmitted();
-                        CharSequence[] titles = new CharSequence[categories.length];
-                        for (int i = 0, length = categories.length; i < length; i++) {
-                            titles[i] = categories[i].getTitleWithColorDot();
-                        }
+                        CharSequence[] titles = getTitlesWithColorDot(
+                                SegmentCategory.categoriesWithoutUnsubmitted());
                         newUserCreatedSegmentCategory = null;
                         new AlertDialog.Builder(SponsorBlockViewController.getOverLaysViewGroupContext())
                                 .setTitle(str("morphe_sb_new_segment_choose_category"))
@@ -371,18 +372,22 @@ public class SponsorBlockUtils {
         try {
             Utils.verifyOnMainThread();
             final SegmentCategory[] values = SegmentCategory.categoriesWithoutHighlights();
-            CharSequence[] titles = new CharSequence[values.length];
-            for (int i = 0; i < values.length; i++) {
-                titles[i] = values[i].getTitleWithColorDot();
-            }
 
             new AlertDialog.Builder(context)
                     .setTitle(str("morphe_sb_new_segment_choose_category"))
-                    .setItems(titles, (dialog, which) -> SBRequester.voteToChangeCategoryOnBackgroundThread(segment, values[which]))
+                    .setItems(getTitlesWithColorDot(values), (dialog, which) -> SBRequester.voteToChangeCategoryOnBackgroundThread(segment, values[which]))
                     .show();
         } catch (Exception ex) {
             Logger.printException(() -> "onNewCategorySelect failure", ex);
         }
+    }
+
+    private static CharSequence[] getTitlesWithColorDot(SegmentCategory[] categories) {
+        CharSequence[] titles = new CharSequence[categories.length];
+        for (int i = 0; i < categories.length; i++) {
+            titles[i] = categories[i].getTitleWithColorDot();
+        }
+        return titles;
     }
 
     public static void onPreviewClicked() {
@@ -528,14 +533,9 @@ public class SponsorBlockUtils {
         return str("morphe_sb_stats_saved_second_format", secondsFormatted);
     }
 
-    private static class EditByHandSaveDialogListener implements DialogInterface.OnClickListener {
+    private static class EditByHandSaveDialogListener {
         private boolean settingStart;
         private WeakReference<EditText> editTextRef = new WeakReference<>(null);
-
-        @Override
-        public void onClick(DialogInterface dialog, int which) {
-            saveTime(which == DialogInterface.BUTTON_NEUTRAL);
-        }
 
         public void saveTime(boolean useCurrentTime) {
             try {

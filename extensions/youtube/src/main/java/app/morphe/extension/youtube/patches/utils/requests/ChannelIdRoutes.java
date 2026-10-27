@@ -37,7 +37,26 @@ public final class ChannelIdRoutes {
     public static final Route.CompiledRoute GET_CHANNEL_ID = new Route(
             Route.Method.POST,
             "player" +
-                    "?prettyPrint=false"
+                    "?prettyPrint=false" +
+                    "&fields=videoDetails"
+    ).compile();
+
+    public static final Route.CompiledRoute GET_DESCRIPTION = new Route(
+            Route.Method.POST,
+            "player" +
+                    "?prettyPrint=false" +
+                    "&fields=videoDetails.shortDescription"
+    ).compile();
+
+    /**
+     * The title as set by the uploader, which is not translated to the language of the request,
+     * and the name of the channel.
+     */
+    public static final Route.CompiledRoute GET_TITLE = new Route(
+            Route.Method.POST,
+            "player" +
+                    "?prettyPrint=false" +
+                    "&fields=videoDetails.title,videoDetails.author"
     ).compile();
 
     private ChannelIdRoutes() {

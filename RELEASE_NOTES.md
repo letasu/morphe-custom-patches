@@ -1,0 +1,12 @@
+## Letasu Patches v1.0.10
+
+- Managerが更新情報を読み取れない問題を修正しました。日時をManager互換のUTC形式とし、未署名の署名URLをnullに統一しました。
+- 本家Morphe Patches v1.48.0（f3acc10e2691ffc4db29c6a6a651ee61fb54c047）の正式版ソース・依存関係・互換対象へ更新しました。
+- Smart Audio FocusとHide members videosを維持し、メンバー限定動画フィルターを本家2.0 APIへ対応させました。
+- 更新時のメタデータ検証と回帰テストをリリース処理へ追加しました。
+
+Morphe Managerを最新版へ更新し、Letasu Patchesの更新を実行してください。更新が反映されない場合は、ソースを `https://github.com/letasu/morphe-custom-patches` から追加し直してください。
+
+YouTubeへ適用する際は、Letasu Patchesだけを選択し、再パッチしてインストールしてください。
+
+本家同様、パッチャー2.0対応のManagerが必要です。実機でのYouTube・外部音楽アプリとの連携動作は未確認です。
