@@ -55,7 +55,7 @@ class GitHubSyncTest(unittest.TestCase):
         with patch.object(sync, "ROOT", root), patch.object(sync, "PLAN", root / "plan.json"), \
                 patch.object(sync, "command", side_effect=command), patch.object(sync, "api", return_value={"tag_name": tag}), \
                 patch.object(sync, "custom_hashes", return_value={}), patch.object(sync, "open_failure", return_value=issue), \
-                patch.object(sync, "summary"), patch.dict(os.environ, {"GITHUB_OUTPUT": str(output), "FORCE_REBUILD": "false"}):
+                patch.object(sync, "summary"), patch.dict(os.environ, {"GITHUB_OUTPUT": str(output), "FORCE_REBUILD": "false", "DRY_RUN": "false"}):
             sync.check()
             return output.read_text(), sync.load_plan()
 
@@ -107,7 +107,8 @@ class GitHubSyncTest(unittest.TestCase):
         with patch.object(sync, "ROOT", root), patch.object(sync, "PLAN", root / "plan.json"), \
                 patch.object(sync, "load_plan", return_value=plan), patch.object(sync, "command", side_effect=command), \
                 patch.object(sync, "custom_hashes", return_value={}), patch.object(sync, "verify_public"), \
-                patch.object(sync, "open_failure", return_value=None), patch.object(sync, "summary"):
+                patch.object(sync, "open_failure", return_value=None), patch.object(sync, "summary"), \
+                patch.dict(os.environ, {"DRY_RUN": "false"}):
             try:
                 sync.publish()
             except ValueError as error:
@@ -135,6 +136,12 @@ class GitHubSyncTest(unittest.TestCase):
         calls, error = self.publication(remote_base="d" * 40)
         self.assertIn("Main advanced", str(error))
         self.assertFalse(any(call[:2] == ("git", "push") for call in calls))
+
+    def test_dry_run_cannot_publish(self):
+        with patch.dict(os.environ, {"DRY_RUN": "true"}), patch.object(sync, "command") as command:
+            with self.assertRaisesRegex(ValueError, "disabled in dry-run"):
+                sync.publish()
+            command.assert_not_called()
 
 
 if __name__ == "__main__":

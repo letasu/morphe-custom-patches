@@ -5,6 +5,10 @@ on:
     - cron: '23 */6 * * *'
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: Validate the full import and build without pushing or publishing
+        type: boolean
+        default: false
       force:
         description: Rebuild and release the current stable upstream even when already imported
         type: boolean
@@ -27,6 +31,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GITHUB_TOKEN: ${{ github.token }}
       FORCE_REBUILD: ${{ inputs.force || false }}
+      DRY_RUN: ${{ inputs.dry_run || false }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -41,8 +46,11 @@ jobs:
         if: steps.check.outputs.changed == 'true'
         uses: ./.github/actions/letasu-build
       - name: Publish verified release and advance main
-        if: steps.check.outputs.changed == 'true'
+        if: steps.check.outputs.changed == 'true' && !inputs.dry_run
         run: python3 -B scripts/letasu/github_sync.py publish
+      - name: Record non-publishing verification
+        if: steps.check.outputs.changed == 'true' && inputs.dry_run
+        run: echo 'Full upstream import, tests and build passed. No commits, tags or releases were pushed.' >> "$GITHUB_STEP_SUMMARY"
       - name: Report actionable failure once
-        if: failure()
+        if: failure() && !inputs.dry_run
         run: python3 -B scripts/letasu/github_sync.py report

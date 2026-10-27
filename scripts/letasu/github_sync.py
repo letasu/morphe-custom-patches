@@ -126,7 +126,8 @@ def check():
     state = json.loads((ROOT / ".letasu/upstream.json").read_text(encoding="utf-8"))
     if tag == state["tag"] and plan["commit"] != state["commit"]:
         raise ValueError("Upstream changed an already imported stable tag; manual review required")
-    force = os.environ.get("FORCE_REBUILD", "false").lower() == "true"
+    force = (os.environ.get("FORCE_REBUILD", "false").lower() == "true"
+             or os.environ.get("DRY_RUN", "false").lower() == "true")
     newer = semver(tag) > semver(state["tag"])
     if semver(tag) < semver(state["tag"]):
         raise ValueError("Refusing to downgrade the imported upstream")
@@ -200,6 +201,8 @@ def verify_public(version):
 
 
 def publish():
+    if os.environ.get("DRY_RUN", "false").lower() == "true":
+        raise ValueError("Publication is disabled in dry-run mode")
     plan = load_plan()
     version = plan["version"]
     tag = f"v{version}"
