@@ -31,6 +31,14 @@ def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
+def validate_patch_list(patch_list, version):
+    if patch_list["version"] != version:
+        raise ValueError("Patch-list version disagrees with release metadata")
+    names = {patch["name"] for patch in patch_list["patches"]}
+    if not {"Smart audio focus", "Hide members videos"}.issubset(names):
+        raise ValueError("Generated patch list is missing a custom patch")
+
+
 def prepare(version, description):
     data = {
         "created_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(timespec="seconds"),
@@ -67,5 +75,5 @@ if __name__ == "__main__":
     validate(data)
     properties = (ROOT / "gradle.properties").read_text(encoding="utf-8")
     assert re.search(r"(?m)^version\s*=\s*" + re.escape(data["version"]) + r"\s*$", properties)
-    assert json.loads((ROOT / "patches-list.json").read_text(encoding="utf-8"))["version"] == data["version"]
+    validate_patch_list(json.loads((ROOT / "patches-list.json").read_text(encoding="utf-8")), data["version"])
     print(f"Manager metadata validated: {data['version']}")

@@ -29,6 +29,14 @@ class MetadataTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             metadata.validate({**self.data, "signature_download_url": ""})
 
+    def test_missing_custom_patch_rejected(self):
+        with self.assertRaises(ValueError):
+            metadata.validate_patch_list({"version": self.data["version"], "patches": [{"name": "Smart audio focus"}]}, self.data["version"])
+
+    def test_generated_patch_list(self):
+        data = json.loads((ROOT / "patches-list.json").read_text(encoding="utf-8"))
+        metadata.validate_patch_list(data, self.data["version"])
+
 
 if __name__ == "__main__":
     unittest.main()
