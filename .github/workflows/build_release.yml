@@ -25,6 +25,9 @@ jobs:
       - name: Cache Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Test Smart Audio Focus
+        run: python3 tests/audiofocus/run_tests.py --java-home "$JAVA_HOME"
+
       - name: Build Patches
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

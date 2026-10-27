@@ -1,11 +1,17 @@
 package app.morphe.extension.youtube.patches.audiofocus;
 
+import android.app.Activity;
+import android.app.Application;
 import android.content.Context;
+import android.content.ContextWrapper;
+import android.graphics.Rect;
 import android.media.AudioAttributes;
 import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.view.View;
+import android.view.ViewTreeObserver;
 
 import androidx.annotation.Nullable;
 
@@ -36,6 +42,43 @@ public final class SmartAudioFocusManager {
     private static volatile boolean hasTransientFocus = false;
     private static volatile boolean userManuallyChangedMedia = false;
     private static volatile boolean isShortsOpen = false;
+    private static volatile boolean isShortsVisible = false;
+    private static volatile boolean isShortsInBackground = false;
+    private static volatile WeakReference<View> shortsViewRef = new WeakReference<>(null);
+    // Accessed only by synchronized updateShortsVisibility().
+    private static final Rect shortsVisibleBounds = new Rect();
+    private static WeakReference<Activity> shortsActivityRef = new WeakReference<>(null);
+    private static boolean lifecycleCallbacksRegistered = false;
+
+    private static final Application.ActivityLifecycleCallbacks lifecycleCallbacks =
+            new Application.ActivityLifecycleCallbacks() {
+                @Override
+                public void onActivityStarted(Activity activity) {
+                    if (activity != shortsActivityRef.get()) return;
+                    isShortsInBackground = false;
+                    updateShortsVisibility(shortsViewRef.get());
+                }
+
+                @Override
+                public void onActivityStopped(Activity activity) {
+                    if (activity == shortsActivityRef.get()
+                            && !activity.isChangingConfigurations() && isShortsVisible) {
+                        SmartAudioFocusManager.onActivityStopped();
+                    }
+                }
+
+                @Override
+                public void onActivityDestroyed(Activity activity) {
+                    if (activity == shortsActivityRef.get()) {
+                        shortsActivityRef.clear();
+                    }
+                }
+
+                @Override public void onActivityCreated(Activity activity, Bundle state) { }
+                @Override public void onActivityResumed(Activity activity) { }
+                @Override public void onActivityPaused(Activity activity) { }
+                @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) { }
+            };
 
     // Cached references
     private static WeakReference<AudioManager> activeAudioManagerRef = new WeakReference<>(null);
@@ -85,21 +128,86 @@ public final class SmartAudioFocusManager {
     public static void onShortsCreate(@Nullable View view) {
         if (view == null) return;
         try {
-            view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-                @Override
-                public void onViewAttachedToWindow(@Nullable View v) {
-                    isShortsOpen = true;
-                    onShortsStateChanged(true);
-                }
-
-                @Override
-                public void onViewDetachedFromWindow(@Nullable View v) {
-                    isShortsOpen = false;
-                    onShortsStateChanged(false);
-                }
-            });
+            if (shortsViewRef.get() == view) return;
+            registerShortsActivity(view.getContext());
+            shortsViewRef = new WeakReference<>(view);
+            ShortsVisibilityObserver observer = new ShortsVisibilityObserver(view);
+            view.addOnAttachStateChangeListener(observer);
+            if (view.isAttachedToWindow()) observer.onViewAttachedToWindow(view);
         } catch (Throwable t) {
             Logger.printException(() -> "SmartAudioFocusManager: onShortsCreate failed", t);
+        }
+    }
+
+    /**
+     * Shorts can stay attached behind a channel page. Observe visibility and bounds,
+     * including changes to ancestor views, rather than treating attachment as playback.
+     */
+    private static final class ShortsVisibilityObserver implements View.OnAttachStateChangeListener,
+            ViewTreeObserver.OnGlobalLayoutListener, ViewTreeObserver.OnPreDrawListener {
+        private final WeakReference<View> viewRef;
+        private ViewTreeObserver treeObserver;
+
+        ShortsVisibilityObserver(View view) {
+            viewRef = new WeakReference<>(view);
+        }
+
+        @Override
+        public void onViewAttachedToWindow(View view) {
+            treeObserver = view.getViewTreeObserver();
+            treeObserver.addOnGlobalLayoutListener(this);
+            treeObserver.addOnPreDrawListener(this);
+            updateShortsVisibility(view);
+        }
+
+        @Override
+        public void onViewDetachedFromWindow(View view) {
+            if (treeObserver != null && treeObserver.isAlive()) {
+                treeObserver.removeOnGlobalLayoutListener(this);
+                treeObserver.removeOnPreDrawListener(this);
+            }
+            treeObserver = null;
+            updateShortsVisibility(view);
+        }
+
+        @Override public void onGlobalLayout() { updateShortsVisibility(viewRef.get()); }
+        @Override public boolean onPreDraw() {
+            updateShortsVisibility(viewRef.get());
+            return true;
+        }
+    }
+
+    private static synchronized void updateShortsVisibility(@Nullable View view) {
+        if (view == null || view != shortsViewRef.get()) return;
+        isShortsOpen = view.isAttachedToWindow();
+        boolean visible = isShortsOpen && !isShortsInBackground
+                && view.isShown() && view.getGlobalVisibleRect(shortsVisibleBounds);
+        if (visible == isShortsVisible) return;
+        isShortsVisible = visible;
+        onShortsStateChanged(visible);
+    }
+
+    private static boolean shouldSuppressFocus() {
+        return isShortsInBackground || (shortsViewRef.get() != null
+                && !isShortsVisible && !isRegularVideoActive());
+    }
+
+    private static synchronized void registerShortsActivity(Context context) {
+        while (context instanceof ContextWrapper && !(context instanceof Activity)) {
+            Context base = ((ContextWrapper) context).getBaseContext();
+            if (base == context) return;
+            context = base;
+        }
+        if (!(context instanceof Activity)) return;
+
+        Activity activity = (Activity) context;
+        if (shortsActivityRef.get() != activity) {
+            shortsActivityRef = new WeakReference<>(activity);
+            isShortsInBackground = false;
+        }
+        if (!lifecycleCallbacksRegistered) {
+            activity.getApplication().registerActivityLifecycleCallbacks(lifecycleCallbacks);
+            lifecycleCallbacksRegistered = true;
         }
     }
 
@@ -122,7 +230,7 @@ public final class SmartAudioFocusManager {
             isSessionActive = false;
 
             // Do not abandon focus if Shorts player is currently open!
-            if (!isShortsOpen) {
+            if (!isShortsVisible) {
                 Logger.printDebug(() -> "SmartAudioFocusManager: Watch session ended (player dismissed)");
                 abandonFocusIfHeld();
             } else {
@@ -203,7 +311,7 @@ public final class SmartAudioFocusManager {
      * Works for both regular videos and Shorts.
      */
     public static synchronized void ensureAudioFocus() {
-        if (hasTransientFocus || userManuallyChangedMedia) {
+        if (shouldSuppressFocus() || hasTransientFocus || userManuallyChangedMedia) {
             return;
         }
 
@@ -298,12 +406,15 @@ public final class SmartAudioFocusManager {
     /**
      * Intercepts AudioManager.requestAudioFocus(...) on API 26+.
      */
-    public static int requestAudioFocus(AudioManager audioManager, AudioFocusRequest request) {
+    public static synchronized int requestAudioFocus(AudioManager audioManager, AudioFocusRequest request) {
         initialize();
 
         if (!SMART_AUDIO_FOCUS.get() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return audioManager.requestAudioFocus(request);
         }
+
+        // Playback callbacks can arrive after Activity.onStop(). Do not pause music again.
+        if (shouldSuppressFocus()) return AudioManager.AUDIOFOCUS_REQUEST_FAILED;
 
         activeAudioManagerRef = new WeakReference<>(audioManager);
         activeFocusRequest = request;
@@ -334,13 +445,15 @@ public final class SmartAudioFocusManager {
     /**
      * Intercepts AudioManager.requestAudioFocus(...) on API < 26.
      */
-    public static int requestAudioFocus(AudioManager audioManager, AudioManager.OnAudioFocusChangeListener listener,
+    public static synchronized int requestAudioFocus(AudioManager audioManager, AudioManager.OnAudioFocusChangeListener listener,
                                         int streamType, int durationHint) {
         initialize();
 
         if (!SMART_AUDIO_FOCUS.get()) {
             return audioManager.requestAudioFocus(listener, streamType, durationHint);
         }
+
+        if (shouldSuppressFocus()) return AudioManager.AUDIOFOCUS_REQUEST_FAILED;
 
         activeAudioManagerRef = new WeakReference<>(audioManager);
         activeLegacyListener = listener;
@@ -369,7 +482,7 @@ public final class SmartAudioFocusManager {
         Logger.printDebug(() -> "SmartAudioFocusManager: abandonAudioFocusRequest intercepted. isSessionActive=" + isSessionActive);
 
         // If user is in watch session or watching Shorts, suppress abandonment
-        if ((isSessionActive || isShortsOpen) && !userManuallyChangedMedia) {
+        if (!shouldSuppressFocus() && (isSessionActive || isShortsVisible) && !userManuallyChangedMedia) {
             Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing abandonAudioFocusRequest because media is active");
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         }
@@ -393,7 +506,7 @@ public final class SmartAudioFocusManager {
 
         Logger.printDebug(() -> "SmartAudioFocusManager: Legacy abandonAudioFocus intercepted. isSessionActive=" + isSessionActive);
 
-        if ((isSessionActive || isShortsOpen) && !userManuallyChangedMedia) {
+        if (!shouldSuppressFocus() && (isSessionActive || isShortsVisible) && !userManuallyChangedMedia) {
             Logger.printDebug(() -> "SmartAudioFocusManager: Suppressing legacy abandonAudioFocus because media is active");
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         }
@@ -411,7 +524,7 @@ public final class SmartAudioFocusManager {
         }
 
         // Do not release if Shorts or regular video is still playing
-        if (isShortsOpen || isRegularVideoActive()) {
+        if (isShortsVisible || isRegularVideoActive()) {
             Logger.printDebug(() -> "SmartAudioFocusManager: abandonFocusIfHeld suppressed because media is still active");
             return;
         }
@@ -440,8 +553,8 @@ public final class SmartAudioFocusManager {
                 } else if (activeFocusRequest instanceof AudioFocusRequest) {
                     audioManager.abandonAudioFocusRequest((AudioFocusRequest) activeFocusRequest);
                 }
-            } else if (activeLegacyListener != null) {
-                audioManager.abandonAudioFocus(activeLegacyListener);
+            } else {
+                audioManager.abandonAudioFocus(legacyFocusListener);
             }
         } catch (Exception e) {
             Logger.printException(() -> "SmartAudioFocusManager: Failed to abandon audio focus", e);
@@ -451,9 +564,11 @@ public final class SmartAudioFocusManager {
     /**
      * Called on MainActivity lifecycle events.
      */
-    public static void onActivityStopped() {
+    public static synchronized void onActivityStopped() {
         if (!SMART_AUDIO_FOCUS.get()) return;
 
+        isShortsInBackground = true;
+        isShortsVisible = false;
         Logger.printDebug(() -> "SmartAudioFocusManager: Activity stopped, abandoning focus");
         isSessionActive = false;
         forceAbandonFocus();
