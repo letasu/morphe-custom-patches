@@ -66,6 +66,15 @@ def run(ref, tag):
         version = json.loads((ROOT / "patches-bundle.json").read_text(encoding="utf-8"))["version"]
         tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
         managed = {name for name in entries if not owned(name)}
+        # On Windows git add -A otherwise retains the old case in the index,
+        # making Java classes compile locally but fail on Linux release runners.
+        upstream_case = {name.casefold(): name for name in managed}
+        case_renames = {name: upstream_case[name.casefold()] for name in tracked
+                        if name and name.casefold() in upstream_case and name != upstream_case[name.casefold()]}
+        tracked_case = {name.casefold() for name in tracked}
+        for name in managed:
+            if safe_path(name).exists() and name.casefold() not in tracked_case:
+                raise ValueError(f"Refusing to overwrite untracked file: {name}")
         for name in tracked:
             if name and not owned(name) and name not in managed:
                 # Only individual tracked files are removed, with containment checked first.
@@ -102,6 +111,9 @@ def run(ref, tag):
                 text = text.replace("</resources>", "\n    " + "\n    ".join(resources[name]) + "\n</resources>")
                 content = text.encode()
             target.write_bytes(content)
+        for old, new in case_renames.items():
+            subprocess.run(["git", "update-index", "--force-remove", "--", old], cwd=ROOT, check=True)
+            subprocess.run(["git", "add", "--", new], cwd=ROOT, check=True)
     state = {"repository": "MorpheApp/morphe-patches", "tag": tag, "commit": revision}
     (config_dir / "upstream.json").write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
     for name in CUSTOM_FILES:

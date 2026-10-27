@@ -33,7 +33,7 @@ class SyncTest(unittest.TestCase):
             assert root.is_relative_to(build)
             with patch.object(sync, "ROOT", root):
                 files = {name: "custom" for name in sync.CUSTOM_FILES}
-                files.update({"README.md": "Letasu", "obsolete.java": "old",
+                files.update({"README.md": "Letasu", "obsolete.java": "old", "Provider.java": "old case",
                               ".github/workflows/build_release.yml": "local workflow",
                               "patches-bundle.json": '{"version":"1.0.10"}'})
                 settings = "".join(f'<string name="{key}_{suffix}">custom</string>'
@@ -51,6 +51,7 @@ class SyncTest(unittest.TestCase):
                         'source = "git@github.com:MorpheApp/morphe-patches.git"',
                         'author = "MorpheApp"', 'website = "https://morphe.software"']),
                     "new.java": "new upstream code",
+                    "PROVIDER.java": "correct case",
                     ".github/workflows/crowdin_pull.yml": "must not be restored",
                     "README.md": "must not replace Letasu",
                     **{name: '<resources><string name="official">updated</string></resources>' for name in sync.RESOURCE_FILES},
@@ -72,8 +73,11 @@ class SyncTest(unittest.TestCase):
                         return "\0".join(files).encode()
                     raise AssertionError(command)
 
-                with patch.object(sync.subprocess, "run"), patch.object(sync.subprocess, "check_output", side_effect=git_output):
+                with patch.object(sync.subprocess, "run") as run_commands, patch.object(sync.subprocess, "check_output", side_effect=git_output):
                     sync.run("upstream/stable", "v1.48.0")
+                run_commands.assert_any_call(["git", "update-index", "--force-remove", "--", "Provider.java"], cwd=root, check=True)
+                run_commands.assert_any_call(["git", "add", "--", "PROVIDER.java"], cwd=root, check=True)
+                self.assertEqual((root / "PROVIDER.java").read_text(), "correct case")
                 self.assertFalse((root / "obsolete.java").exists())
                 self.assertFalse((root / ".github/workflows/crowdin_pull.yml").exists())
                 self.assertEqual((root / "new.java").read_text(), "new upstream code")
