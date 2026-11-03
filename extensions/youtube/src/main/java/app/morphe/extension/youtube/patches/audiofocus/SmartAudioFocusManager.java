@@ -17,6 +17,13 @@ import androidx.annotation.Nullable;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import app.morphe.extension.shared.Logger;
 import app.morphe.extension.shared.Utils;
@@ -44,7 +51,8 @@ public final class SmartAudioFocusManager {
     private static volatile boolean isShortsOpen = false;
     private static volatile boolean isShortsVisible = false;
     private static volatile boolean isShortsInBackground = false;
-    private static volatile WeakReference<View> shortsViewRef = new WeakReference<>(null);
+    private static final List<ShortsVisibilityObserver> shortsViews = new ArrayList<>();
+    private static volatile boolean hasTrackedShorts = false;
     // Accessed only by synchronized updateShortsVisibility().
     private static final Rect shortsVisibleBounds = new Rect();
     private static WeakReference<Activity> shortsActivityRef = new WeakReference<>(null);
@@ -56,7 +64,7 @@ public final class SmartAudioFocusManager {
                 public void onActivityStarted(Activity activity) {
                     if (activity != shortsActivityRef.get()) return;
                     isShortsInBackground = false;
-                    updateShortsVisibility(shortsViewRef.get());
+                    updateShortsVisibility();
                 }
 
                 @Override
@@ -70,6 +78,7 @@ public final class SmartAudioFocusManager {
                 @Override
                 public void onActivityDestroyed(Activity activity) {
                     if (activity == shortsActivityRef.get()) {
+                        if (isShortsVisible) SmartAudioFocusManager.onActivityStopped();
                         shortsActivityRef.clear();
                     }
                 }
@@ -85,8 +94,11 @@ public final class SmartAudioFocusManager {
     private static Object activeFocusRequest = null; // AudioFocusRequest on API 26+
     private static AudioManager.OnAudioFocusChangeListener activeLegacyListener = null; // on API < 26
 
-    // Wrapped request for API 26+
-    private static AudioFocusRequest wrappedFocusRequest = null;
+    // A transient loss does not unregister a request. Keep the exact focus clients
+    // until abandonment, including legacy calls on Android 8+ and delayed grants.
+    private static final Map<AudioManager, AudioFocusRequest> modernFocusRequests = new IdentityHashMap<>();
+    private static final Set<AudioManager> legacyFocusManagers =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     static {
         try {
@@ -125,13 +137,16 @@ public final class SmartAudioFocusManager {
     /**
      * Injected by bytecode patch into Shorts overlay view creation.
      */
-    public static void onShortsCreate(@Nullable View view) {
+    public static synchronized void onShortsCreate(@Nullable View view) {
         if (view == null) return;
         try {
-            if (shortsViewRef.get() == view) return;
+            for (ShortsVisibilityObserver observer : shortsViews) {
+                if (observer.viewRef.get() == view) return;
+            }
             registerShortsActivity(view.getContext());
-            shortsViewRef = new WeakReference<>(view);
             ShortsVisibilityObserver observer = new ShortsVisibilityObserver(view);
+            shortsViews.add(observer);
+            hasTrackedShorts = true;
             view.addOnAttachStateChangeListener(observer);
             if (view.isAttachedToWindow()) observer.onViewAttachedToWindow(view);
         } catch (Throwable t) {
@@ -147,6 +162,7 @@ public final class SmartAudioFocusManager {
             ViewTreeObserver.OnGlobalLayoutListener, ViewTreeObserver.OnPreDrawListener {
         private final WeakReference<View> viewRef;
         private ViewTreeObserver treeObserver;
+        private boolean attached;
 
         ShortsVisibilityObserver(View view) {
             viewRef = new WeakReference<>(view);
@@ -154,41 +170,59 @@ public final class SmartAudioFocusManager {
 
         @Override
         public void onViewAttachedToWindow(View view) {
+            attached = true;
+            if (treeObserver != null && treeObserver.isAlive()) {
+                treeObserver.removeOnGlobalLayoutListener(this);
+                treeObserver.removeOnPreDrawListener(this);
+            }
             treeObserver = view.getViewTreeObserver();
             treeObserver.addOnGlobalLayoutListener(this);
             treeObserver.addOnPreDrawListener(this);
-            updateShortsVisibility(view);
+            updateShortsVisibility();
         }
 
         @Override
         public void onViewDetachedFromWindow(View view) {
+            // Android clears View.mAttachInfo after invoking detach listeners.
+            // Do not query isAttachedToWindow()/isShown() here: both can still be true.
+            attached = false;
             if (treeObserver != null && treeObserver.isAlive()) {
                 treeObserver.removeOnGlobalLayoutListener(this);
                 treeObserver.removeOnPreDrawListener(this);
             }
             treeObserver = null;
-            updateShortsVisibility(view);
+            updateShortsVisibility();
         }
 
-        @Override public void onGlobalLayout() { updateShortsVisibility(viewRef.get()); }
+        @Override public void onGlobalLayout() { updateShortsVisibility(); }
         @Override public boolean onPreDraw() {
-            updateShortsVisibility(viewRef.get());
+            updateShortsVisibility();
             return true;
         }
     }
 
-    private static synchronized void updateShortsVisibility(@Nullable View view) {
-        if (view == null || view != shortsViewRef.get()) return;
-        isShortsOpen = view.isAttachedToWindow();
-        boolean visible = isShortsOpen && !isShortsInBackground
-                && view.isShown() && view.getGlobalVisibleRect(shortsVisibleBounds);
+    private static synchronized void updateShortsVisibility() {
+        boolean attached = false;
+        boolean visible = false;
+        for (Iterator<ShortsVisibilityObserver> iterator = shortsViews.iterator(); iterator.hasNext();) {
+            ShortsVisibilityObserver observer = iterator.next();
+            View view = observer.viewRef.get();
+            if (view == null) {
+                iterator.remove();
+            } else if (observer.attached) {
+                attached = true;
+                visible |= !isShortsInBackground && view.isShown()
+                        && view.getGlobalVisibleRect(shortsVisibleBounds);
+            }
+        }
+        isShortsOpen = attached;
         if (visible == isShortsVisible) return;
         isShortsVisible = visible;
         onShortsStateChanged(visible);
     }
 
     private static boolean shouldSuppressFocus() {
-        return isShortsInBackground || (shortsViewRef.get() != null
+        return isShortsInBackground || (hasTrackedShorts
                 && !isShortsVisible && !isRegularVideoActive());
     }
 
@@ -341,8 +375,9 @@ public final class SmartAudioFocusManager {
                     .setWillPauseWhenDucked(true)
                     .setOnAudioFocusChangeListener(focusListener);
 
-            wrappedFocusRequest = builder.build();
-            int result = audioManager.requestAudioFocus(wrappedFocusRequest);
+            AudioFocusRequest managedRequest = builder.build();
+            int result = audioManager.requestAudioFocus(managedRequest);
+            rememberModernRequest(audioManager, managedRequest, result);
             Logger.printDebug(() -> "SmartAudioFocusManager: ensureAudioFocus request result: " + result);
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 hasTransientFocus = true;
@@ -351,6 +386,7 @@ public final class SmartAudioFocusManager {
             }
         } else {
             int result = audioManager.requestAudioFocus(legacyFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT);
+            rememberLegacyRequest(audioManager, result);
             if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 hasTransientFocus = true;
                 isSessionActive = true;
@@ -359,7 +395,12 @@ public final class SmartAudioFocusManager {
         }
     }
 
-    private static final AudioManager.OnAudioFocusChangeListener focusListener = focusChange -> {
+    private static final AudioManager.OnAudioFocusChangeListener focusListener =
+            SmartAudioFocusManager::onManagedFocusChange;
+
+    private static synchronized void onManagedFocusChange(int focusChange) {
+        // A focus callback already queued before abandonment must not revive a closed session.
+        if (modernFocusRequests.isEmpty() && legacyFocusManagers.isEmpty()) return;
         Logger.printDebug(() -> "SmartAudioFocusManager: onAudioFocusChange: " + focusChange);
         if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
             hasTransientFocus = false;
@@ -373,7 +414,7 @@ public final class SmartAudioFocusManager {
             userManuallyChangedMedia = false;
         }
         forwardFocusChange(focusChange);
-    };
+    }
 
     private static final AudioManager.OnAudioFocusChangeListener legacyFocusListener = focusListener;
 
@@ -418,28 +459,30 @@ public final class SmartAudioFocusManager {
 
         activeAudioManagerRef = new WeakReference<>(audioManager);
         activeFocusRequest = request;
+        activeLegacyListener = null;
         userManuallyChangedMedia = false;
 
         int originalGain = request.getFocusGain();
         Logger.printDebug(() -> "SmartAudioFocusManager: requestAudioFocus intercepted. Original gain: " + originalGain);
 
-        if (originalGain == AudioManager.AUDIOFOCUS_GAIN) {
-            AudioFocusRequest.Builder builder = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
-                    .setAudioAttributes(request.getAudioAttributes())
-                    .setAcceptsDelayedFocusGain(request.acceptsDelayedFocusGain())
-                    .setWillPauseWhenDucked(request.willPauseWhenDucked())
-                    .setOnAudioFocusChangeListener(focusListener);
+        // Wrap transient requests as well: forwarding them would create a second,
+        // untracked listener which prevents the previous music app regaining focus.
+        int gain = originalGain == AudioManager.AUDIOFOCUS_GAIN
+                ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT : originalGain;
+        AudioFocusRequest.Builder builder = new AudioFocusRequest.Builder(gain)
+                .setAudioAttributes(request.getAudioAttributes())
+                .setAcceptsDelayedFocusGain(request.acceptsDelayedFocusGain())
+                .setWillPauseWhenDucked(request.willPauseWhenDucked())
+                .setOnAudioFocusChangeListener(focusListener);
 
-            wrappedFocusRequest = builder.build();
-            int result = audioManager.requestAudioFocus(wrappedFocusRequest);
-            if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-                hasTransientFocus = true;
-                isSessionActive = true;
-            }
-            return result;
+        AudioFocusRequest managedRequest = builder.build();
+        int result = audioManager.requestAudioFocus(managedRequest);
+        rememberModernRequest(audioManager, managedRequest, result);
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            hasTransientFocus = true;
+            isSessionActive = true;
         }
-
-        return audioManager.requestAudioFocus(request);
+        return result;
     }
 
     /**
@@ -457,6 +500,7 @@ public final class SmartAudioFocusManager {
 
         activeAudioManagerRef = new WeakReference<>(audioManager);
         activeLegacyListener = listener;
+        activeFocusRequest = null;
         userManuallyChangedMedia = false;
 
         int hintToUse = (durationHint == AudioManager.AUDIOFOCUS_GAIN)
@@ -464,6 +508,7 @@ public final class SmartAudioFocusManager {
                 : durationHint;
 
         int result = audioManager.requestAudioFocus(focusListener, streamType, hintToUse);
+        rememberLegacyRequest(audioManager, result);
         if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             hasTransientFocus = true;
             isSessionActive = true;
@@ -474,7 +519,7 @@ public final class SmartAudioFocusManager {
     /**
      * Intercepts AudioManager.abandonAudioFocusRequest(...) on API 26+.
      */
-    public static int abandonAudioFocusRequest(AudioManager audioManager, AudioFocusRequest request) {
+    public static synchronized int abandonAudioFocusRequest(AudioManager audioManager, AudioFocusRequest request) {
         if (!SMART_AUDIO_FOCUS.get() || Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return audioManager.abandonAudioFocusRequest(request);
         }
@@ -487,19 +532,13 @@ public final class SmartAudioFocusManager {
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         }
 
-        hasTransientFocus = false;
-        if (wrappedFocusRequest != null) {
-            int result = audioManager.abandonAudioFocusRequest(wrappedFocusRequest);
-            wrappedFocusRequest = null;
-            return result;
-        }
-        return audioManager.abandonAudioFocusRequest(request);
+        return hasManagedRequests() ? forceAbandonFocus() : audioManager.abandonAudioFocusRequest(request);
     }
 
     /**
      * Intercepts AudioManager.abandonAudioFocus(...) on API < 26.
      */
-    public static int abandonAudioFocus(AudioManager audioManager, AudioManager.OnAudioFocusChangeListener listener) {
+    public static synchronized int abandonAudioFocus(AudioManager audioManager, AudioManager.OnAudioFocusChangeListener listener) {
         if (!SMART_AUDIO_FOCUS.get()) {
             return audioManager.abandonAudioFocus(listener);
         }
@@ -511,15 +550,14 @@ public final class SmartAudioFocusManager {
             return AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
         }
 
-        hasTransientFocus = false;
-        return audioManager.abandonAudioFocus(listener);
+        return hasManagedRequests() ? forceAbandonFocus() : audioManager.abandonAudioFocus(listener);
     }
 
     /**
      * Releases audio focus if no media (regular video or Shorts) is currently active.
      */
     public static synchronized void abandonFocusIfHeld() {
-        if (!hasTransientFocus) {
+        if (!hasManagedRequests()) {
             return;
         }
 
@@ -535,29 +573,58 @@ public final class SmartAudioFocusManager {
     /**
      * Unconditionally releases audio focus and resets session state.
      */
-    private static synchronized void forceAbandonFocus() {
-        AudioManager audioManager = getAudioManager();
-        if (audioManager == null) {
-            return;
-        }
-
+    private static synchronized int forceAbandonFocus() {
         Logger.printDebug(() -> "SmartAudioFocusManager: Releasing audio focus now");
         hasTransientFocus = false;
         isSessionActive = false;
 
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                if (wrappedFocusRequest != null) {
-                    audioManager.abandonAudioFocusRequest(wrappedFocusRequest);
-                    wrappedFocusRequest = null;
-                } else if (activeFocusRequest instanceof AudioFocusRequest) {
-                    audioManager.abandonAudioFocusRequest((AudioFocusRequest) activeFocusRequest);
+        Map<AudioManager, AudioFocusRequest> modern = new IdentityHashMap<>(modernFocusRequests);
+        List<AudioManager> legacy = new ArrayList<>(legacyFocusManagers);
+        modernFocusRequests.clear();
+        legacyFocusManagers.clear();
+        int result = AudioManager.AUDIOFOCUS_REQUEST_GRANTED;
+        for (Map.Entry<AudioManager, AudioFocusRequest> entry : modern.entrySet()) {
+            try {
+                if (entry.getKey().abandonAudioFocusRequest(entry.getValue()) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    modernFocusRequests.put(entry.getKey(), entry.getValue());
+                    result = AudioManager.AUDIOFOCUS_REQUEST_FAILED;
                 }
-            } else {
-                audioManager.abandonAudioFocus(legacyFocusListener);
+            } catch (Exception e) {
+                modernFocusRequests.put(entry.getKey(), entry.getValue());
+                result = AudioManager.AUDIOFOCUS_REQUEST_FAILED;
+                Logger.printException(() -> "SmartAudioFocusManager: Failed to abandon modern focus", e);
             }
-        } catch (Exception e) {
-            Logger.printException(() -> "SmartAudioFocusManager: Failed to abandon audio focus", e);
+        }
+        for (AudioManager manager : legacy) {
+            try {
+                if (manager.abandonAudioFocus(legacyFocusListener) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                    legacyFocusManagers.add(manager);
+                    result = AudioManager.AUDIOFOCUS_REQUEST_FAILED;
+                }
+            } catch (Exception e) {
+                legacyFocusManagers.add(manager);
+                result = AudioManager.AUDIOFOCUS_REQUEST_FAILED;
+                Logger.printException(() -> "SmartAudioFocusManager: Failed to abandon legacy focus", e);
+            }
+        }
+        return result;
+    }
+
+    private static boolean hasManagedRequests() {
+        return !modernFocusRequests.isEmpty() || !legacyFocusManagers.isEmpty();
+    }
+
+    private static void rememberModernRequest(AudioManager manager, AudioFocusRequest request, int result) {
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED || result == AudioManager.AUDIOFOCUS_REQUEST_DELAYED) {
+            modernFocusRequests.put(manager, request);
+            legacyFocusManagers.remove(manager);
+        }
+    }
+
+    private static void rememberLegacyRequest(AudioManager manager, int result) {
+        if (result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+            legacyFocusManagers.add(manager);
+            modernFocusRequests.remove(manager);
         }
     }
 

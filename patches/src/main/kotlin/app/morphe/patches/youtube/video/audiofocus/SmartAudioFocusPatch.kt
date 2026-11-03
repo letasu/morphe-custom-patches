@@ -47,7 +47,7 @@ val smartAudioFocusPatch = bytecodePatch(
             var needsPatch = false
             classDef.methods.forEach { method ->
                 if (method.implementation?.instructions?.any {
-                        it.opcode == Opcode.INVOKE_VIRTUAL &&
+                        (it.opcode == Opcode.INVOKE_VIRTUAL || it.opcode == Opcode.INVOKE_VIRTUAL_RANGE) &&
                                 (it as? ReferenceInstruction)?.reference?.let { ref ->
                                     val mRef = ref as? MethodReference
                                     mRef?.definingClass == "Landroid/media/AudioManager;" &&
@@ -63,7 +63,7 @@ val smartAudioFocusPatch = bytecodePatch(
                 classDef.methods.forEach { method ->
                     val instructions = method.implementation?.instructions?.toList() ?: return@forEach
                     val targetIndices = instructions.mapIndexedNotNull { index, instruction ->
-                        if (instruction.opcode == Opcode.INVOKE_VIRTUAL) {
+                        if (instruction.opcode == Opcode.INVOKE_VIRTUAL || instruction.opcode == Opcode.INVOKE_VIRTUAL_RANGE) {
                             val ref = (instruction as? ReferenceInstruction)?.reference as? MethodReference
                             if (ref?.definingClass == "Landroid/media/AudioManager;") {
                                 when (ref.name) {

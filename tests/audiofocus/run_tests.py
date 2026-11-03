@@ -83,6 +83,8 @@ public class View {
     public void addOnAttachStateChangeListener(OnAttachStateChangeListener l) { listener = l; }
     public void attach() { attached = true; listener.onViewAttachedToWindow(this); }
     public void detach() { attached = false; listener.onViewDetachedFromWindow(this); }
+    // Android can still report attachment from inside the detach callback.
+    public void detachBeforeClearingAttachment() { listener.onViewDetachedFromWindow(this); attached = false; }
     public interface OnAttachStateChangeListener {
         void onViewAttachedToWindow(View view);
         void onViewDetachedFromWindow(View view);
@@ -132,6 +134,7 @@ public class AudioFocusRequest {
     public AudioAttributes getAudioAttributes() { return attributes; }
     public boolean acceptsDelayedFocusGain() { return false; }
     public boolean willPauseWhenDucked() { return false; }
+    public void dispatchFocusChange(int change) { if (mFocusListener != null) mFocusListener.onAudioFocusChange(change); }
     public static class Builder {
         private final AudioFocusRequest request = new AudioFocusRequest();
         public Builder(int gain) { request.gain = gain; }
@@ -150,13 +153,21 @@ package android.media;
 public class AudioManager {
     public static final int AUDIOFOCUS_GAIN = 1, AUDIOFOCUS_GAIN_TRANSIENT = 2,
         AUDIOFOCUS_LOSS = -1, AUDIOFOCUS_LOSS_TRANSIENT = -2,
-        AUDIOFOCUS_REQUEST_GRANTED = 1, AUDIOFOCUS_REQUEST_FAILED = 0, STREAM_MUSIC = 3;
+        AUDIOFOCUS_REQUEST_GRANTED = 1, AUDIOFOCUS_REQUEST_FAILED = 0, AUDIOFOCUS_REQUEST_DELAYED = 2, STREAM_MUSIC = 3;
     public int requests, releases;
     public Object owner;
+    public int nextResult = AUDIOFOCUS_REQUEST_GRANTED;
+    public Object lastOwner;
     public interface OnAudioFocusChangeListener { void onAudioFocusChange(int value); }
-    public int requestAudioFocus(AudioFocusRequest r) { requests++; owner = r; return 1; }
+    public int requestAudioFocus(AudioFocusRequest r) {
+        requests++; owner = lastOwner = r; int result = nextResult; nextResult = 1; return result;
+    }
     public int requestAudioFocus(OnAudioFocusChangeListener l, int s, int h) {
-        requests++; owner = l; return 1;
+        requests++; owner = lastOwner = l; return 1;
+    }
+    public void dispatchFocusChange(int change) {
+        if (lastOwner instanceof AudioFocusRequest r) r.dispatchFocusChange(change);
+        else if (lastOwner instanceof OnAudioFocusChangeListener l) l.onAudioFocusChange(change);
     }
     public int abandonAudioFocusRequest(AudioFocusRequest r) {
         if (owner == r) { owner = null; releases++; } return 1;
@@ -244,6 +255,9 @@ public class FocusLifecycleTest {
         AudioManager.OnAudioFocusChangeListener listener = change -> {};
         if (scenario.equals("disabled")) SmartAudioFocusManager.SMART_AUDIO_FOCUS.value = false;
         if (scenario.equals("alreadyAttached")) view.attached = true;
+        if (scenario.equals("legacyOnModern")) {
+            SmartAudioFocusManager.requestAudioFocus(audio, listener, 3, 1);
+        }
         SmartAudioFocusManager.onShortsCreate(view);
         if (!view.attached) view.attach();
         check(app.registrations == 1, "Lifecycle callback must be registered once");
@@ -257,6 +271,68 @@ public class FocusLifecycleTest {
         check(audio.owner != null, "Opening Shorts must request focus");
         SmartAudioFocusManager.onShortsCreate(view);
         check(app.registrations == 1, "Repeated hook must not duplicate observers");
+        if (scenario.equals("detachWhileAttached")) {
+            view.detachBeforeClearingAttachment();
+            check(audio.owner == null, "Detach callback must release focus before Android clears attachment");
+            return;
+        }
+        if (scenario.equals("precreatedView")) {
+            View next = new View(host);
+            SmartAudioFocusManager.onShortsCreate(next);
+            view.detach();
+            check(audio.owner == null, "A not-yet-attached next view must not hide the active view's detach");
+            return;
+        }
+        if (scenario.equals("overlappingViews")) {
+            View next = new View(host);
+            SmartAudioFocusManager.onShortsCreate(next);
+            next.attach();
+            next.detach();
+            check(audio.owner != null, "Detaching one overlapping Shorts player must retain focus for the other");
+            view.detachBeforeClearingAttachment();
+            check(audio.owner == null, "Detaching the last visible Shorts player must release focus");
+            return;
+        }
+        if (scenario.equals("transientRequest")) {
+            SmartAudioFocusManager.requestAudioFocus(audio, new AudioFocusRequest.Builder(2).build());
+            view.detach();
+            check(audio.owner == null, "Already-transient native requests must also be released");
+            return;
+        }
+        if (scenario.equals("legacyOnModern")) {
+            view.detach();
+            check(audio.owner == null, "Legacy requests on modern Android must release the registered listener");
+            return;
+        }
+        if (scenario.equals("mixedAbandon")) {
+            audio.dispatchFocusChange(AudioManager.AUDIOFOCUS_LOSS);
+            SmartAudioFocusManager.abandonAudioFocus(audio, listener);
+            check(audio.owner == null, "A legacy abandon call must release a modern wrapped request");
+            return;
+        }
+        if (scenario.equals("transientLoss")) {
+            audio.dispatchFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT);
+            view.detachBeforeClearingAttachment();
+            check(audio.owner == null, "A temporarily lost focus request must still be abandoned on exit");
+            return;
+        }
+        if (scenario.equals("delayedRequest")) {
+            audio.nextResult = AudioManager.AUDIOFOCUS_REQUEST_DELAYED;
+            check(SmartAudioFocusManager.requestAudioFocus(audio, original) == 2, "Simulate a pending native request");
+            view.detachBeforeClearingAttachment();
+            check(audio.owner == null, "Pending focus requests must be cancelled when leaving Shorts");
+            audio.dispatchFocusChange(AudioManager.AUDIOFOCUS_GAIN);
+            view.attach();
+            check(audio.owner != null, "A queued old gain callback must not suppress focus acquisition on return");
+            return;
+        }
+        if (scenario.equals("multipleManagers")) {
+            AudioManager second = new AudioManager();
+            SmartAudioFocusManager.requestAudioFocus(second, original);
+            view.detach();
+            check(audio.owner == null && second.owner == null, "Every AudioManager focus client must be released");
+            return;
+        }
         if (scenario.equals("channel") || scenario.equals("offscreen")) {
             if (scenario.equals("channel")) view.shown = false;
             else view.onScreen = false;
@@ -344,7 +420,9 @@ def main():
             path.write_text(source, encoding="utf-8")
             sources.append(str(path))
         subprocess.run([str(args.java_home / "bin/javac"), "-encoding", "UTF-8", "-d", str(temp), *sources, str(manager)], check=True)
-        for scenario in ("background", "legacy", "foreground", "regular", "disabled", "alreadyAttached", "detached", "channel", "offscreen"):
+        for scenario in ("background", "legacy", "foreground", "regular", "disabled", "alreadyAttached", "detached", "channel", "offscreen",
+                         "detachWhileAttached", "precreatedView", "overlappingViews", "transientRequest", "legacyOnModern", "mixedAbandon", "multipleManagers",
+                         "transientLoss", "delayedRequest"):
             subprocess.run([str(args.java_home / "bin/java"), "-cp", str(temp), "FocusLifecycleTest", scenario], check=True)
             print(f"PASS: {scenario}", flush=True)
 
