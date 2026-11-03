@@ -22,7 +22,7 @@
 ## パッチ一覧
 
 <!-- PATCHES_START -->
-> **[v1.0.10](https://github.com/letasu/morphe-custom-patches/releases/tag/v1.0.10)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;192 patches total
+> **[v1.0.11](https://github.com/letasu/morphe-custom-patches/releases/tag/v1.0.11)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;192 patches total
 <details>
 <summary>📦 YouTube&nbsp;&nbsp;•&nbsp;&nbsp;107 patches</summary>
 <br>
